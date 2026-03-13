@@ -152,21 +152,49 @@ if (reportForm) {
 // ========== SKILL ROADMAP DATA ==========
 const skillRoadmap = {
     "Web Developer": [
-        { skill: "HTML/CSS",        title: "HTML & CSS Full Course",     link: "https://www.youtube.com/watch?v=mU6anWqZJcc" },
-        { skill: "JavaScript",     title: "Modern JS for Beginners",    link: "https://www.youtube.com/watch?v=jS4aFq5-91M" },
-        { skill: "React",          title: "React JS Crash Course",       link: "https://www.youtube.com/watch?v=bMknfKXIFA8" }
+        { skill: "HTML/CSS",         title: "HTML & CSS Full Course",      videoId: "mU6anWqZJcc", channel: "Apna College" },
+        { skill: "JavaScript",       title: "Modern JS Tutorial",           videoId: "jS4aFq5-91M", channel: "SuperSimpleDev" },
+        { skill: "React",            title: "React JS Crash Course",        videoId: "bMknfKXIFA8", channel: "Traversy Media" }
     ],
     "Data Analyst": [
-        { skill: "Excel",          title: "Advanced Excel Tutorial",     link: "https://www.youtube.com/watch?v=Vl0hux8aHY0" },
-        { skill: "SQL",            title: "SQL Full Course",              link: "https://www.youtube.com/watch?v=HXV3zePRqGY" },
-        { skill: "Python",         title: "Python for Data Science",     link: "https://www.youtube.com/watch?v=rfscVS0vtbw" }
+        { skill: "Excel",            title: "Advanced Excel Tutorial",      videoId: "Vl0hux8aHY0", channel: "Leila Gharani" },
+        { skill: "SQL",              title: "SQL Full Course",               videoId: "HXV3zePRqGY", channel: "freeCodeCamp" },
+        { skill: "Python",           title: "Python for Data Science",      videoId: "rfscVS0vtbw", channel: "freeCodeCamp" }
     ],
     "AI/ML Engineer": [
-        { skill: "Python",         title: "Python for AI",               link: "https://www.youtube.com/watch?v=NWONeJKn6kc" },
-        { skill: "Maths",          title: "Linear Algebra for ML",       link: "https://www.youtube.com/watch?v=u0TIDZ-I690" },
-        { skill: "Neural Networks",title: "Deep Learning Specialization",link: "https://www.youtube.com/watch?v=aircAruvnKk" }
+        { skill: "Python",           title: "Python for AI",                videoId: "NWONeJKn6kc", channel: "CodeWithHarry" },
+        { skill: "Maths",            title: "Linear Algebra for ML",        videoId: "u0TIDZ-I690", channel: "3Blue1Brown" },
+        { skill: "Neural Networks",  title: "Deep Learning Specialization", videoId: "aircAruvnKk", channel: "3Blue1Brown" }
     ]
 };
+
+function displayCourses(missing, courseList) {
+    courseList.innerHTML = '';
+    if (missing.length === 0) {
+        courseList.innerHTML = '<p class="success-msg">You are job-ready for this role! 🎉</p>';
+        return;
+    }
+    missing.forEach(item => {
+        const thumbUrl = `https://img.youtube.com/vi/${item.videoId}/maxresdefault.jpg`;
+        const ytUrl    = `https://www.youtube.com/watch?v=${item.videoId}`;
+        courseList.innerHTML += `
+            <div class="course-card">
+                <div class="video-preview" onclick="window.open('${ytUrl}','_blank')">
+                    <img src="${thumbUrl}" alt="${item.title}" class="thumb"
+                         onerror="this.src='https://img.youtube.com/vi/${item.videoId}/hqdefault.jpg'">
+                    <div class="play-overlay"><i class="fas fa-play"></i></div>
+                </div>
+                <div class="course-info">
+                    <span class="course-badge">FREE COURSE</span>
+                    <h4>${item.skill}: ${item.title}</h4>
+                    <p>by ${item.channel}</p>
+                    <button onclick="window.open('${ytUrl}','_blank')" class="yt-btn">
+                        <i class="fab fa-youtube"></i> Watch on YouTube
+                    </button>
+                </div>
+            </div>`;
+    });
+}
 
 function analyzeGap() {
     const skillsEl   = document.getElementById('current-skills');
@@ -178,33 +206,14 @@ function analyzeGap() {
     const currentSkills = skillsEl ? skillsEl.value : '';
     const targetRole    = roleEl  ? roleEl.value  : '';
 
-    if (!currentSkills.trim()) {
-        alert('Please enter your current skills.');
-        return;
-    }
+    if (!currentSkills.trim()) { alert('Please enter your current skills.'); return; }
+    if (!resultsEl || !courseList) return;
 
     const skillsLower = currentSkills.toLowerCase();
     const required    = skillRoadmap[targetRole] || [];
     const missing     = required.filter(item => !skillsLower.includes(item.skill.toLowerCase()));
 
-    if (!resultsEl || !courseList) return;
-    courseList.innerHTML = '';
-
-    if (missing.length > 0) {
-        missing.forEach(item => {
-            courseList.innerHTML += `
-                <div class="course-card glass">
-                    <div class="course-badge">Free Course</div>
-                    <h4>Missing Skill: ${item.skill}</h4>
-                    <p>${item.title}</p>
-                    <a href="${item.link}" target="_blank" rel="noopener noreferrer" class="watch-btn">
-                        <i class="fab fa-youtube"></i> Watch on YouTube
-                    </a>
-                </div>`;
-        });
-    } else {
-        courseList.innerHTML = '<p class="success-msg">You are job-ready for this role! 🎉</p>';
-    }
+    displayCourses(missing, courseList);
 
     if (gapForm) gapForm.style.display = 'none';
     resultsEl.style.display = 'block';
