@@ -156,7 +156,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const closePopupBtn = document.getElementById('closePopupBtn');
     const ctaRegisterBtn = document.getElementById('ctaRegisterBtn');
     const regPopupForm = document.getElementById('regPopupForm');
-    const toast = document.getElementById('toastNotification');
     const isRegistered = localStorage.getItem('realcheck_user_v2');
 
     initFirebase();
@@ -226,14 +225,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // 1. Close Popup
             regPopupOverlay.classList.remove('show');
             
-            // 2. Show Success Toast
-            if (toast) {
-                toast.classList.add('show');
-                // Hide Toast after 4 seconds
-                setTimeout(() => {
-                    toast.classList.remove('show');
-                }, 4000);
-            }
+
         });
     }
 
@@ -338,6 +330,462 @@ document.addEventListener('DOMContentLoaded', () => {
                 analyzeSubmitBtn.innerHTML = originalText;
                 analyzeSubmitBtn.disabled = false;
             }
+        });
+    }
+
+    // ========== REMOTE JOBS LOADER ==========
+    const dummyRemoteJobs = [
+        {
+            position: 'Frontend Developer Intern',
+            company: 'TechVision AI',
+            location: 'Remote',
+            description: 'Work on responsive UI components, reusable frontend modules, and collaborate with designers to improve user experience.',
+            apply_url: '#',
+            salary: '₹15,000 / month',
+            tags: ['Internship', 'Frontend', 'JavaScript'],
+            riskScore: 12,
+            status: 'Safe',
+            role: 'internship'
+        },
+        {
+            position: 'Backend Node.js Developer',
+            company: 'SecureNet Systems',
+            location: 'Hyderabad, India',
+            description: 'Build APIs, optimize database queries, and manage backend services focused on reliability and security.',
+            apply_url: '#',
+            salary: '₹8 - 12 LPA',
+            tags: ['Backend', 'Node.js', 'APIs'],
+            riskScore: 85,
+            status: 'Suspicious',
+            role: 'backend developer'
+        },
+        {
+            position: 'Data Analyst',
+            company: 'DataFlow Corp',
+            location: 'Remote',
+            description: 'Analyze campaign and user data, prepare dashboards, and generate actionable insights for product teams.',
+            apply_url: '#',
+            salary: '₹6 - 8 LPA',
+            tags: ['SQL', 'Excel', 'Analytics'],
+            riskScore: 25,
+            status: 'Safe',
+            role: 'data analyst'
+        }
+    ];
+
+    let allRemoteJobs = [];
+    let currentDisplayedJobs = [];
+    let currentJobsDomain = 'all';
+    let jobsExpanded = false;
+
+    const jobModal = document.getElementById('jobModal');
+    const jobModalBody = document.getElementById('modal-body');
+    const closeJobModalBtn = document.getElementById('closeJobModal');
+
+    function getRemoteJobsEndpoints() {
+        const endpoints = ['http://localhost:5000/api/remote-jobs', '/api/remote-jobs'];
+        return [...new Set(endpoints)];
+    }
+
+    function getJobsContainer() {
+        return document.getElementById('jobs-container') || document.getElementById('jobsContainer');
+    }
+
+    function normalizeJob(job) {
+        return {
+            position: job.position || job.job_title || 'Untitled Role',
+            company: job.company || job.company_name || 'Unknown Company',
+            location: job.location || 'Remote',
+            description: job.description || job.job_description || '',
+            apply_url: job.apply_url || job.url || '#',
+            salary: job.salary || null,
+            tags: Array.isArray(job.tags) ? job.tags : [],
+            riskScore: Number.isFinite(job.riskScore) ? job.riskScore : (Number.isFinite(job.risk_score) ? job.risk_score : 0),
+            status: job.status || 'Safe',
+            role: (job.role || '').toLowerCase()
+        };
+    }
+
+    function escapeHtml(value) {
+        return String(value || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function formatJobDescription(description) {
+        const raw = String(description || '').trim();
+        if (!raw) return 'No description provided by the employer.';
+        return raw;
+    }
+
+    function showJobDetails(jobIndex) {
+        const job = currentDisplayedJobs[jobIndex];
+        if (!job || !jobModal || !jobModalBody) return;
+
+        jobModalBody.innerHTML = `
+            <div class="modal-header">
+                <h2 style="color: var(--navy);">${escapeHtml(job.position)}</h2>
+                <span class="company-tag">${escapeHtml(job.company)}</span>
+            </div>
+            <hr>
+            <div class="job-full-details">
+                <p><strong>Location:</strong> ${escapeHtml(job.location)}</p>
+                <p><strong>Category:</strong> ${escapeHtml(job.role || 'general')}</p>
+                <div class="description-box">
+                    ${formatJobDescription(job.description)}
+                </div>
+                <center>
+                    <a href="${escapeHtml(job.apply_url)}" target="_blank" rel="noopener noreferrer" class="apply-btn-large apply-btn-main">Apply on RemoteOK</a>
+                </center>
+            </div>
+        `;
+
+        jobModal.style.display = 'flex';
+    }
+
+    function closeModal() {
+        if (jobModal) {
+            jobModal.style.display = 'none';
+        }
+    }
+
+    window.openModal = showJobDetails;
+    window.closeModal = closeModal;
+
+    function getFilteredRemoteJobs(domain) {
+        if (domain === 'all') {
+            return allRemoteJobs;
+        }
+
+        return allRemoteJobs.filter((job) => {
+            const role = String(job.role || '').toLowerCase();
+            const position = String(job.position || '').toLowerCase();
+            return role === domain || position.includes(domain);
+        });
+    }
+
+    function getInitialVisibleJobsCount() {
+        const container = getJobsContainer();
+        if (!container) return 6;
+
+        const columns = getComputedStyle(container)
+            .gridTemplateColumns
+            .split(' ')
+            .filter(Boolean)
+            .length;
+
+        const safeColumns = Math.max(columns || 1, 1);
+        return safeColumns * 2;
+    }
+
+    function updateShowMoreButton(totalCount) {
+        const showMoreJobsBtn = document.getElementById('showMoreJobsBtn');
+        if (!showMoreJobsBtn) return;
+
+        const shouldShow = !jobsExpanded && totalCount > getInitialVisibleJobsCount();
+        showMoreJobsBtn.style.display = shouldShow ? 'inline-flex' : 'none';
+    }
+
+    async function loadRemoteJobs() {
+        const container = getJobsContainer();
+        if (!container) return;
+
+        for (const endpoint of getRemoteJobsEndpoints()) {
+            try {
+                const res = await fetch(endpoint);
+                if (!res.ok) {
+                    throw new Error(`API ${res.status}`);
+                }
+
+                const data = await res.json();
+                if (Array.isArray(data) && data.length > 0) {
+                    allRemoteJobs = data.map(normalizeJob);
+                    renderRemoteJobs('all');
+                    return;
+                }
+            } catch (err) {
+                console.warn(`Jobs fetch failed for ${endpoint}:`, err.message);
+            }
+        }
+
+        console.warn('Using dummy jobs because API data was unavailable or empty.');
+        allRemoteJobs = dummyRemoteJobs.map(normalizeJob);
+        renderRemoteJobs('all');
+    }
+
+    function renderRemoteJobs(domain) {
+        const container = getJobsContainer();
+        if (!container) return;
+
+        const filtered = getFilteredRemoteJobs(domain);
+        const visibleJobs = jobsExpanded ? filtered : filtered.slice(0, getInitialVisibleJobsCount());
+        currentDisplayedJobs = visibleJobs;
+
+        if (filtered.length === 0) {
+            container.innerHTML = '<div class="jobs-empty">No jobs found for this category right now.</div>';
+            updateShowMoreButton(0);
+            return;
+        }
+
+        container.innerHTML = visibleJobs.map((job, index) => {
+            const tagClass = job.riskScore >= 60 ? 'danger' : job.riskScore >= 30 ? 'warning' : 'safe';
+            const tagsHtml = (job.tags || []).slice(0, 4)
+                .map(t => `<span class="job-tag-pill">${t}</span>`)
+                .join('');
+            const salaryHtml = job.salary
+                ? `<span class="job-dynamic-salary">${job.salary}</span>`
+                : '<span></span>';
+            return `
+                            <div class="job-dynamic-card job-card" data-job-index="${index}" onclick="openModal(${index})">
+                <div class="job-dynamic-header">
+                  <h3>${job.position}</h3>
+                  <span class="risk-tag ${tagClass}">${job.status}</span>
+                </div>
+                                <p class="job-dynamic-company" style="color: var(--orange);"><i class="fa-solid fa-building"></i> ${job.company}</p>
+                <p class="job-dynamic-location"><i class="fa-solid fa-location-dot"></i> ${job.location}</p>
+                ${tagsHtml ? `<div class="job-dynamic-tags">${tagsHtml}</div>` : ''}
+                <div class="job-dynamic-footer">
+                  ${salaryHtml}
+                  <div class="job-card-actions">
+                                        <button type="button" class="btn btn-secondary btn-sm view-job-btn view-btn" data-job-index="${index}">View Details</button>
+                    <a href="${job.apply_url}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm">Apply on RemoteOK</a>
+                  </div>
+                </div>
+              </div>`;
+        }).join('');
+
+        container.querySelectorAll('.view-job-btn').forEach((btn) => {
+            btn.addEventListener('click', (event) => {
+                event.stopPropagation();
+                const index = Number(btn.getAttribute('data-job-index'));
+                showJobDetails(index);
+            });
+        });
+
+        container.querySelectorAll('.job-dynamic-card').forEach((card) => {
+            card.addEventListener('click', (event) => {
+                if (event.target.closest('a') || event.target.closest('button')) return;
+                const index = Number(card.getAttribute('data-job-index'));
+                showJobDetails(index);
+            });
+        });
+
+        updateShowMoreButton(filtered.length);
+    }
+
+    if (closeJobModalBtn) {
+        closeJobModalBtn.addEventListener('click', () => {
+            closeModal();
+        });
+    }
+
+    window.addEventListener('click', (event) => {
+        if (event.target === jobModal) {
+            closeModal();
+        }
+    });
+
+    window.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && jobModal && (jobModal.style.display === 'block' || jobModal.style.display === 'flex')) {
+            closeModal();
+        }
+    });
+
+    document.querySelectorAll('.domain-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.domain-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+                                currentJobsDomain = btn.dataset.domain;
+                                jobsExpanded = false;
+                                renderRemoteJobs(currentJobsDomain);
+        });
+    });
+
+                        const showMoreJobsBtn = document.getElementById('showMoreJobsBtn');
+                        if (showMoreJobsBtn) {
+                            showMoreJobsBtn.addEventListener('click', () => {
+                                jobsExpanded = true;
+                                renderRemoteJobs(currentJobsDomain);
+                            });
+                        }
+
+                        window.addEventListener('resize', () => {
+                            if (!jobsExpanded && allRemoteJobs.length > 0) {
+                                renderRemoteJobs(currentJobsDomain);
+                            }
+                        });
+
+    async function loadJobs() {
+        await loadRemoteJobs();
+    }
+
+    window.loadJobs = loadJobs;
+    loadJobs();
+
+    // ========== SKILL GAP ANALYZER ==========
+    const currentSkillsInput = document.getElementById('currentSkillsInput');
+    const targetRoleInput = document.getElementById('targetRoleInput');
+    const checkSkillGapBtn = document.getElementById('checkSkillGapBtn');
+    const skillGapResults = document.getElementById('skillGapResults');
+    const skillGapList = document.getElementById('skillGapList');
+    const skillGapRoleLabel = document.getElementById('skillGapRoleLabel');
+
+    const roleSkillsMap = {
+        'data analyst': [
+            'Excel',
+            'SQL',
+            'Python',
+            'Power BI/Tableau',
+            'Statistics',
+            'Data Cleaning',
+            'Data Visualization'
+        ],
+        'ai/ml engineer': [
+            'Python',
+            'Statistics',
+            'Linear Algebra',
+            'Machine Learning',
+            'Deep Learning',
+            'TensorFlow/PyTorch',
+            'MLOps'
+        ],
+        'web developer': [
+            'HTML',
+            'CSS',
+            'JavaScript',
+            'React',
+            'Node.js',
+            'Git/GitHub',
+            'REST APIs'
+        ],
+        'frontend developer': [
+            'HTML',
+            'CSS',
+            'JavaScript',
+            'React',
+            'Responsive Design',
+            'Git/GitHub',
+            'Web Performance'
+        ],
+        'backend developer': [
+            'Node.js/Java/Python',
+            'Databases',
+            'REST APIs',
+            'Authentication',
+            'System Design Basics',
+            'Git/GitHub',
+            'Cloud Basics'
+        ]
+    };
+
+    const roleAliases = {
+        'data analyst': ['analyst', 'business analyst'],
+        'ai/ml engineer': ['ml engineer', 'ai engineer', 'machine learning engineer', 'data scientist'],
+        'web developer': ['full stack developer', 'fullstack developer', 'developer'],
+        'frontend developer': ['front end developer', 'ui developer'],
+        'backend developer': ['back end developer', 'server developer']
+    };
+
+    const normalizeText = (value) => String(value || '').trim().toLowerCase();
+
+    const parseSkills = (value) => {
+        return String(value || '')
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean);
+    };
+
+    const normalizeSkill = (skill) => normalizeText(skill).replace(/\s+/g, ' ');
+
+    const resolveRoleKey = (inputRole) => {
+        const normalizedRole = normalizeText(inputRole);
+        if (!normalizedRole) return null;
+
+        if (roleSkillsMap[normalizedRole]) {
+            return normalizedRole;
+        }
+
+        for (const [roleKey, aliases] of Object.entries(roleAliases)) {
+            if (normalizedRole.includes(roleKey) || aliases.some((alias) => normalizedRole.includes(alias))) {
+                return roleKey;
+            }
+        }
+
+        return null;
+    };
+
+    const hasSkill = (userSkillSet, requiredSkill) => {
+        const req = normalizeSkill(requiredSkill);
+        for (const userSkill of userSkillSet) {
+            if (userSkill.includes(req) || req.includes(userSkill)) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    const skillGapForm = document.querySelector('.skill-gap-form');
+    const skillGapBackBtn = document.getElementById('skillGapBackBtn');
+
+    if (skillGapBackBtn) {
+        skillGapBackBtn.addEventListener('click', () => {
+            skillGapResults.style.display = 'none';
+            if (skillGapList) skillGapList.innerHTML = '';
+            if (skillGapRoleLabel) skillGapRoleLabel.textContent = '';
+            if (currentSkillsInput) currentSkillsInput.value = '';
+            if (targetRoleInput) targetRoleInput.value = '';
+            if (skillGapForm) {
+                skillGapForm.style.display = 'grid';
+            }
+            skillGapResults.closest('.skill-gap-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    }
+
+    if (checkSkillGapBtn && currentSkillsInput && targetRoleInput && skillGapResults && skillGapList) {
+        checkSkillGapBtn.addEventListener('click', () => {
+            const skillsRaw = currentSkillsInput.value;
+            const roleRaw = targetRoleInput.value;
+
+            const roleKey = resolveRoleKey(roleRaw);
+            if (!roleKey) {
+                alert('Please enter a recognized role, for example: Data Analyst, AI/ML Engineer, Web Developer, Frontend Developer, Backend Developer.');
+                return;
+            }
+
+            const currentSkills = parseSkills(skillsRaw);
+            if (currentSkills.length === 0) {
+                alert('Please enter your current skills separated by commas.');
+                return;
+            }
+
+            const userSkillSet = new Set(currentSkills.map(normalizeSkill));
+            const requiredSkills = roleSkillsMap[roleKey] || [];
+
+            const missingSkills = requiredSkills.filter((requiredSkill) => !hasSkill(userSkillSet, requiredSkill));
+
+            skillGapList.innerHTML = '';
+            if (skillGapRoleLabel) skillGapRoleLabel.textContent = `— ${roleRaw.trim()}`;
+
+            if (missingSkills.length === 0) {
+                const li = document.createElement('li');
+                li.textContent = 'Great job — you already cover the essential skill set for this role. Focus on projects and interview prep next.';
+                skillGapList.appendChild(li);
+            } else {
+                missingSkills.forEach((skill) => {
+                    const li = document.createElement('li');
+                    li.textContent = skill;
+                    skillGapList.appendChild(li);
+                });
+            }
+
+            if (skillGapForm) {
+                skillGapForm.style.display = 'none';
+            }
+            skillGapResults.style.display = 'block';
+            skillGapResults.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         });
     }
 });
