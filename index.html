@@ -75,69 +75,30 @@
 
   <!-- ========== INSTANT SCAM DETECTION ANALYZER ========== -->
   <section class="analyzer-section" id="instant-analyzer">
-    <div class="container">
-      <div class="section-header text-center reveal">
-        <span class="badge-primary">⚡ Instant Analysis</span>
-        <h2>Check Any Job Offer Instantly</h2>
-        <p>Paste text or upload a screenshot to get AI-powered scam detection results in seconds.</p>
-      </div>
+    <div id="scam-analyzer" style="font-family: 'Segoe UI', sans-serif; padding: 50px 0; background: #ffffff;">
+      <div style="max-width: 900px; margin: auto; padding: 40px; border: 1.5px solid #0056f7; border-radius: 25px; box-shadow: 0 10px 30px rgba(0, 86, 247, 0.05);">
 
-      <div class="analyzer-container reveal">
-        <div class="analyzer-box">
+        <h4 style="text-align: center; color: #0056f7; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;">⚡ Instant Analysis</h4>
+        <h1 style="text-align: center; color: #002147; font-size: 36px; margin-bottom: 15px;">Check Any Job Offer Instantly</h1>
+        <p style="text-align: center; color: #666; margin-bottom: 40px; font-size: 18px;">Paste a job message, recruiter email, or company website and get AI-powered scam detection results in seconds.</p>
 
-          <!-- Tab Switcher -->
-          <div class="method-tabs">
-            <button class="tab-btn active" onclick="switchTab('text-tab', event)">📝 Paste Text</button>
-            <button class="tab-btn" onclick="switchTab('image-tab', event)">📷 Upload Screenshot</button>
-          </div>
-
-          <!-- Text Tab -->
-          <div id="text-tab" class="tab-content active">
-            <div class="form-group">
-              <label for="job-text">Paste Job Details</label>
-              <textarea id="job-text" rows="8" placeholder="Paste job description, recruiter email, message text, or website URL here..."></textarea>
-            </div>
-          </div>
-
-          <!-- Image Tab -->
-          <div id="image-tab" class="tab-content">
-            <div class="upload-container">
-              <input type="file" id="job-image" accept="image/*" onchange="previewImage(event)" style="display:none;">
-              <label for="job-image" class="upload-label">
-                <i class="fas fa-cloud-upload-alt"></i> Click to Upload Screenshot
-              </label>
-              <img id="img-preview" alt="Preview" style="display:none; max-width:100%; border-radius:10px; margin-top:14px;">
-            </div>
-          </div>
-
-          <button class="analyze-now-btn" onclick="startAnalysis()">
-            🔍 Analyze Now
-          </button>
-
-          <!-- Results Card -->
-          <div id="detection-result" class="analysis-results" style="display:none;">
-            <div class="result-header">
-              <h3 id="result-status"></h3>
-              <button type="button" class="btn-close" onclick="document.getElementById('detection-result').style.display='none';">✕</button>
-            </div>
-            <div class="risk-indicator">
-              <div class="risk-badge" id="riskBadge">—</div>
-              <div class="risk-score">
-                <span class="score-label">Risk Score:</span>
-                <span class="score-value" id="riskScore">0</span><span class="score-unit">/100</span>
-              </div>
-            </div>
-            <div class="reasons-box">
-              <h4>Detection Results:</h4>
-              <p id="risk-details" style="color: var(--text-secondary); font-size:0.95rem;"></p>
-              <ul id="reasonsList" class="reasons-list"></ul>
-            </div>
-            <div class="result-footer">
-              <button type="button" class="btn btn-secondary" onclick="document.getElementById('detection-result').style.display='none';">Analyze Another</button>
-            </div>
-          </div>
-
+        <div style="position: relative; margin-bottom: 25px;">
+          <label style="font-weight: bold; color: #002147; display: block; margin-bottom: 10px;">Paste Job Details (All-in-One)</label>
+          <textarea id="jobDetails" style="width: 100%; height: 150px; padding: 20px; border: 1.5px solid #0056f7; border-radius: 15px; font-size: 16px; outline: none; box-sizing: border-box;" placeholder="Paste everything here: job description, recruiter email, website URL/domain, salary, joining details, and any message text..."></textarea>
         </div>
+
+        <button onclick="runAnalysis()" id="analyzeBtn" style="width: 100%; padding: 18px; background: #2563eb; color: white; border: none; border-radius: 50px; font-size: 18px; font-weight: bold; cursor: pointer; transition: 0.3s; box-shadow: 0 5px 15px rgba(37, 99, 235, 0.3);">
+          🔍 Analyze Now
+        </button>
+
+        <div id="analysisResult" style="display: none; margin-top: 30px; padding: 25px; border-radius: 15px; background: #f8faff; border: 1px solid #e0e7ff;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <span id="riskBadge" style="padding: 8px 16px; border-radius: 50px; font-weight: bold; font-size: 14px;"></span>
+            <span style="color: #666; font-size: 14px;">Risk Score: <strong id="riskScore" style="color: #002147;">0</strong>/100</span>
+          </div>
+          <p id="verdictText" style="color: #002147; font-size: 16px; font-weight: 500;"></p>
+        </div>
+
       </div>
     </div>
   </section>

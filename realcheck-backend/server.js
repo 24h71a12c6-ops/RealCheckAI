@@ -35,6 +35,49 @@ app.get('/api/firebase-config', (req, res) => {
     return res.json(config);
 });
 
+app.post('/api/gemini-analyze', async (req, res) => {
+    const text = req.body?.text || req.body?.extractedText;
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    if (!apiKey) {
+        return res.status(500).json({
+            error: 'Gemini API key missing. Set GEMINI_API_KEY in your .env file.'
+        });
+    }
+
+    if (!String(text || '').trim()) {
+        return res.status(400).json({ error: 'Text is required for analysis.' });
+    }
+
+    try {
+        const response = await axios.post(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+            {
+                contents: [{
+                    parts: [{
+                        text: `Analyze this internship/job offer for scams or low-quality mass-recruitment templates (e.g. CodSoft-style letters).\nText: "${text}"\nProvide a Risk Score (0-100) and a clear 2-3 sentence verdict. Be direct, concise, and helpful.`
+                    }]
+                }]
+            },
+            {
+                headers: { 'Content-Type': 'application/json' },
+                timeout: 20000
+            }
+        );
+
+        const aiText = response?.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!aiText) {
+            return res.status(502).json({ error: 'Gemini returned an empty response.' });
+        }
+
+        return res.json({ verdict: aiText });
+    } catch (error) {
+        const status = error.response?.status || 500;
+        const message = error.response?.data?.error?.message || error.message || 'Gemini request failed.';
+        return res.status(status).json({ error: message });
+    }
+});
+
 // Routes
 app.use('/api/analyze-job', analyzeJobRoute);
 
