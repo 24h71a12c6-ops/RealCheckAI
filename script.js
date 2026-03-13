@@ -358,34 +358,6 @@ if (fileUpload) {
     });
 }
 
-// ========== REGISTRATION FORM SUBMISSION ==========
-const reportForm = document.getElementById('reportForm');
-if (reportForm) {
-    reportForm.addEventListener('submit', function(e) {
-        e.preventDefault();
-        const btn = this.querySelector('button[type="submit"]');
-        
-        // Save user details for profile dropdown
-        const inputs = this.querySelectorAll('input, select, textarea');
-        const fullName = inputs[0]?.value?.trim() || '';
-        const email = inputs[1]?.value?.trim() || '';
-        const role = inputs[2]?.value?.trim() || '';
-        localStorage.setItem('realcheck_user_v2', JSON.stringify({ name: fullName, email, role }));
-
-        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Submitting...';
-        btn.disabled = true;
-        
-        setTimeout(() => {
-            this.style.display = 'none';
-            const reportSuccess = document.getElementById('reportSuccess');
-            if (reportSuccess) {
-                reportSuccess.style.display = 'block';
-            }
-            updateProfileNav();
-        }, 1000);
-    });
-}
-
 // ========== PROFILE NAV ==========
 function getStoredUser() {
     try {
@@ -417,6 +389,7 @@ function updateProfileNav() {
                 </div>
             </div>
             <div class="profile-dropdown-actions">
+                <button class="btn-profile-item" onclick="toggleTheme()"><i class="fa-solid ${document.body.classList.contains('light') ? 'fa-moon' : 'fa-sun'}"></i> ${document.body.classList.contains('light') ? 'Switch to Dark' : 'Switch to Light'}</button>
                 <div class="profile-divider"></div>
                 <button class="btn-logout" onclick="logoutUser()"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>
             </div>`;
@@ -425,7 +398,11 @@ function updateProfileNav() {
         dropdown.innerHTML = `
             <div class="profile-dropdown-guest">
                 <p>Sign in to access your profile and saved analyses.</p>
-                <a href="#registration" class="btn btn-primary w-100" onclick="document.getElementById('profileDropdown').classList.remove('open')">Register / Sign In</a>
+                <a href="#registration-section" class="btn btn-primary w-100" onclick="document.getElementById('profileDropdown').classList.remove('open')">Register / Sign In</a>
+            </div>
+            <div class="profile-dropdown-actions">
+                <div class="profile-divider"></div>
+                <button class="btn-profile-item" onclick="toggleTheme()"><i class="fa-solid ${document.body.classList.contains('light') ? 'fa-moon' : 'fa-sun'}"></i> ${document.body.classList.contains('light') ? 'Switch to Dark' : 'Switch to Light'}</button>
             </div>`;
     }
 }
@@ -436,12 +413,223 @@ function escapeHtmlNav(v) {
 
 window.logoutUser = function() {
     localStorage.removeItem('realcheck_user_v2');
+    localStorage.removeItem('userEmail');
+    localStorage.setItem('showLoginAfterLogout', '1');
     if (firebaseAuth && firebaseAuth.currentUser && !firebaseAuth.currentUser.isAnonymous) {
         firebaseAuth.signOut().catch(() => {});
     }
     document.getElementById('profileDropdown').classList.remove('open');
     updateProfileNav();
+    syncRegistrationSectionForAuthState();
 };
+
+// ========== REGISTRATION / AUTH HELPERS ==========
+const LOCAL_ACCOUNTS_KEY = 'realcheck_local_accounts_v1';
+let forgotCodeState = null;
+let forgotTimerInterval = null;
+
+function getLocalAccounts() {
+    try {
+        const raw = localStorage.getItem(LOCAL_ACCOUNTS_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (_) {
+        return [];
+    }
+}
+
+function saveLocalAccounts(accounts) {
+    localStorage.setItem(LOCAL_ACCOUNTS_KEY, JSON.stringify(accounts));
+}
+
+function findLocalAccount(identifier) {
+    const query = String(identifier || '').trim().toLowerCase();
+    if (!query) return null;
+    return getLocalAccounts().find((account) => {
+        const email = String(account.email || '').toLowerCase();
+        const name = String(account.name || '').toLowerCase();
+        return email === query || name === query;
+    }) || null;
+}
+
+function upsertLocalAccount(accountData) {
+    const accounts = getLocalAccounts();
+    const email = String(accountData.email || '').trim().toLowerCase();
+    const nextAccounts = accounts.filter((account) => String(account.email || '').trim().toLowerCase() !== email);
+    nextAccounts.push({ ...accountData, email });
+    saveLocalAccounts(nextAccounts);
+}
+
+function isRegisteredUser() {
+    return !!getStoredUser() || !!localStorage.getItem('userEmail');
+}
+
+function persistAuthUser({ name, email, phone = '', role = '' }) {
+    const payload = {
+        name: String(name || 'User').trim() || 'User',
+        email: String(email || '').trim(),
+        role: String(role || '').trim(),
+        phone: String(phone || '').trim()
+    };
+
+    localStorage.setItem('realcheck_user_v2', JSON.stringify(payload));
+    if (payload.email) {
+        localStorage.setItem('userEmail', payload.email);
+        localStorage.setItem('lastUserEmail', payload.email);
+    }
+    localStorage.removeItem('showLoginAfterLogout');
+    updateProfileNav();
+}
+
+function showRegistrationSection({ preferLogin = false } = {}) {
+    const section = document.getElementById('registration-section');
+    if (section) {
+        section.hidden = false;
+        section.style.removeProperty('display');
+    }
+
+    const overlay = document.getElementById('regModalOverlay');
+    if (overlay) {
+        overlay.hidden = true;
+    }
+    document.body.classList.remove('reg-modal-open');
+
+    if (typeof setAuthMode === 'function') {
+        setAuthMode(preferLogin ? 'login' : 'signup');
+    }
+}
+
+function hideRegistrationSection() {
+    const section = document.getElementById('registration-section');
+    if (section) {
+        section.hidden = true;
+        section.style.display = 'none';
+    }
+
+    const overlay = document.getElementById('regModalOverlay');
+    if (overlay) {
+        overlay.hidden = true;
+    }
+
+    document.body.classList.remove('reg-modal-open');
+}
+
+function syncRegistrationSectionForAuthState() {
+    if (isRegisteredUser()) {
+        hideRegistrationSection();
+        return;
+    }
+
+    const preferLogin = localStorage.getItem('showLoginAfterLogout') === '1';
+    showRegistrationSection({ preferLogin });
+}
+
+function getPasswordChecks(password) {
+    const value = String(password || '');
+    return {
+        uppercase: /[A-Z]/.test(value),
+        lowercase: /[a-z]/.test(value),
+        number: /\d/.test(value),
+        special: /[^A-Za-z0-9]/.test(value),
+        length: value.length >= 8
+    };
+}
+
+function isStrongPassword(password) {
+    return Object.values(getPasswordChecks(password)).every(Boolean);
+}
+
+function setRequirementState(element, valid) {
+    if (!element) return;
+    element.classList.toggle('valid', !!valid);
+}
+
+function setToggleBehavior(toggleId, inputId) {
+    const toggle = document.getElementById(toggleId);
+    const input = document.getElementById(inputId);
+    if (!toggle || !input) return;
+
+    toggle.addEventListener('click', () => {
+        const isPassword = input.type === 'password';
+        input.type = isPassword ? 'text' : 'password';
+        toggle.classList.toggle('fa-eye', !isPassword);
+        toggle.classList.toggle('fa-eye-slash', isPassword);
+    });
+}
+
+function resetForgotFlowState() {
+    forgotCodeState = null;
+    if (forgotTimerInterval) {
+        clearInterval(forgotTimerInterval);
+        forgotTimerInterval = null;
+    }
+
+    const forgotCodeBlock = document.getElementById('forgotCodeBlock');
+    const forgotTimer = document.getElementById('forgotTimer');
+    const forgotPasswordFields = document.getElementById('forgotPasswordFields');
+    const forgotNewPassword = document.getElementById('forgotNewPassword');
+    const forgotConfirmPassword = document.getElementById('forgotConfirmPassword');
+    const forgotResetBtn = document.getElementById('forgotResetBtn');
+    const forgotCode = document.getElementById('forgotCode');
+
+    if (forgotCodeBlock) forgotCodeBlock.hidden = true;
+    if (forgotTimer) {
+        forgotTimer.hidden = true;
+        forgotTimer.textContent = '';
+    }
+    if (forgotPasswordFields) forgotPasswordFields.hidden = true;
+    if (forgotNewPassword) {
+        forgotNewPassword.value = '';
+        forgotNewPassword.disabled = true;
+    }
+    if (forgotConfirmPassword) {
+        forgotConfirmPassword.value = '';
+        forgotConfirmPassword.disabled = true;
+    }
+    if (forgotResetBtn) forgotResetBtn.disabled = true;
+    if (forgotCode) forgotCode.value = '';
+}
+
+function openProfileDropdown() {
+    const dropdown = document.getElementById('profileDropdown');
+    if (dropdown) dropdown.classList.add('open');
+}
+
+function setAuthMode(mode) {
+    const signupPanel = document.getElementById('signupPanel');
+    const loginPanel = document.getElementById('loginPanel');
+    const forgotPanel = document.getElementById('forgotPanel');
+    const authFooterText = document.getElementById('authFooterText');
+    const authFooterAction = document.getElementById('authFooterAction');
+    const authFooter = document.querySelector('.auth-footer');
+    const socialBlock = document.getElementById('authSocialBlock');
+    const isLogin = mode === 'login';
+    const isForgot = mode === 'forgot';
+
+    if (signupPanel) signupPanel.hidden = isLogin || isForgot;
+    if (loginPanel) loginPanel.hidden = !isLogin;
+    if (forgotPanel) forgotPanel.hidden = !isForgot;
+    if (authFooter) authFooter.hidden = isForgot;
+    if (socialBlock) socialBlock.hidden = !(!isLogin && !isForgot);
+
+    if (authFooterText) authFooterText.textContent = isLogin ? 'New here?' : 'Already have an account?';
+    if (authFooterAction) authFooterAction.textContent = isLogin ? 'Sign up' : 'Log in';
+
+    if (isLogin) {
+        const loginEmailInput = document.getElementById('loginEmail');
+        const loginPasswordInput = document.getElementById('loginPassword');
+        const showLoginAfterLogout = localStorage.getItem('showLoginAfterLogout') === '1';
+        const lastUserEmail = (localStorage.getItem('lastUserEmail') || '').trim();
+        if (loginPasswordInput) loginPasswordInput.value = '';
+        if (loginEmailInput) {
+            loginEmailInput.value = showLoginAfterLogout && lastUserEmail ? lastUserEmail : '';
+        }
+    }
+
+    if (isForgot) {
+        resetForgotFlowState();
+    }
+}
 
 // ========== THEME TOGGLE ==========
 (function initTheme() {
@@ -451,25 +639,14 @@ window.logoutUser = function() {
 })();
 
 function updateThemeIcon() {
-    const icon = document.getElementById('themeIcon');
-    if (!icon) return;
-    if (document.body.classList.contains('light')) {
-        icon.className = 'fa-solid fa-moon';
-    } else {
-        icon.className = 'fa-solid fa-sun';
-    }
+    // kept for back-compat; dropdown is refreshed via updateProfileNav
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    const themeBtn = document.getElementById('themeToggleBtn');
-    if (themeBtn) {
-        themeBtn.addEventListener('click', () => {
-            document.body.classList.toggle('light');
-            localStorage.setItem('realcheck_theme', document.body.classList.contains('light') ? 'light' : 'dark');
-            updateThemeIcon();
-        });
-    }
-});
+window.toggleTheme = function() {
+    document.body.classList.toggle('light');
+    localStorage.setItem('realcheck_theme', document.body.classList.contains('light') ? 'light' : 'dark');
+    updateProfileNav();
+};
 
 // ========== SKILL ROADMAP DATA ==========
 const skillRoadmap = {
@@ -632,10 +809,24 @@ window.analyzeGap = analyzeGap;
 // ========== SPLASH SCREEN & REGISTRATION LOGIC ==========
 document.addEventListener('DOMContentLoaded', () => {
     const splash = document.getElementById('splashScreen');
-    const regPopupOverlay = document.getElementById('regPopupOverlay');
-    const closePopupBtn = document.getElementById('closePopupBtn');
-    const ctaRegisterBtn = document.getElementById('ctaRegisterBtn');
-    const regPopupForm = document.getElementById('regPopupForm');
+    const regSection = document.getElementById('registration-section');
+    const regOverlay = document.getElementById('regModalOverlay');
+    const regCloseBtn = document.getElementById('regModalClose');
+    const registrationForm = document.getElementById('registrationForm');
+    const loginForm = document.getElementById('loginForm');
+    const forgotPasswordForm = document.getElementById('forgotPasswordForm');
+    const authFooterAction = document.getElementById('authFooterAction');
+    const forgotPasswordLink = document.getElementById('forgotPasswordLink');
+    const forgotBackToLogin = document.getElementById('forgotBackToLogin');
+    const forgotSendCodeBtn = document.getElementById('forgotSendCodeBtn');
+    const forgotVerifyCodeBtn = document.getElementById('forgotVerifyCodeBtn');
+    const googleFallbackBtn = document.getElementById('googleFallbackBtn');
+    const phoneInput = document.getElementById('phone');
+    const passwordInput = document.getElementById('password');
+    const forgotNewPassword = document.getElementById('forgotNewPassword');
+    const forgotConfirmPassword = document.getElementById('forgotConfirmPassword');
+    let openRegModal = null;
+    let closeRegModal = null;
 
     initFirebase().then(() => {
         loadScamDatabase();
@@ -668,65 +859,422 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }, 3000);
 
-    // Modal controls
-    if (closePopupBtn) {
-        closePopupBtn.addEventListener('click', () => {
-            regPopupOverlay.classList.remove('show');
+    setAuthMode('signup');
+    syncRegistrationSectionForAuthState();
+
+    if (phoneInput) {
+        phoneInput.addEventListener('input', (event) => {
+            event.target.value = event.target.value.replace(/[^0-9]/g, '').slice(0, 10);
         });
     }
 
-    if (ctaRegisterBtn) {
-        ctaRegisterBtn.addEventListener('click', () => {
-            regPopupOverlay.classList.add('show');
+    if (passwordInput) {
+        const passwordRequirementsBox = document.getElementById('passwordRequirementsBox');
+
+        const updatePasswordRequirements = (value) => {
+            const checks = getPasswordChecks(value);
+            setRequirementState(document.getElementById('req-uppercase'), checks.uppercase);
+            setRequirementState(document.getElementById('req-lowercase'), checks.lowercase);
+            setRequirementState(document.getElementById('req-number'), checks.number);
+            setRequirementState(document.getElementById('req-special'), checks.special);
+            setRequirementState(document.getElementById('req-length'), checks.length);
+        };
+
+        const showPasswordDropdown = () => {
+            if (passwordRequirementsBox) {
+                passwordRequirementsBox.hidden = false;
+            }
+        };
+
+        const hidePasswordDropdown = () => {
+            if (passwordRequirementsBox && passwordInput.value.length === 0) {
+                passwordRequirementsBox.hidden = true;
+            }
+        };
+
+        passwordInput.addEventListener('focus', showPasswordDropdown);
+        passwordInput.addEventListener('click', showPasswordDropdown);
+
+        passwordInput.addEventListener('blur', () => {
+            // Small delay so clicking the toggle button doesn't flicker the dropdown
+            setTimeout(hidePasswordDropdown, 150);
+        });
+
+        passwordInput.addEventListener('input', (event) => {
+            const value = event.target.value;
+            if (passwordRequirementsBox) {
+                passwordRequirementsBox.hidden = false;
+            }
+            updatePasswordRequirements(value);
         });
     }
 
-    window.addEventListener('click', (e) => {
-        if (e.target === regPopupOverlay) {
-            regPopupOverlay.classList.remove('show');
+    const syncForgotResetButton = () => {
+        const password = forgotNewPassword ? forgotNewPassword.value : '';
+        const confirmPassword = forgotConfirmPassword ? forgotConfirmPassword.value : '';
+        const checks = getPasswordChecks(password);
+        setRequirementState(document.getElementById('ruleLength'), checks.length);
+        setRequirementState(document.getElementById('ruleUpper'), checks.uppercase);
+        setRequirementState(document.getElementById('ruleLower'), checks.lowercase);
+        setRequirementState(document.getElementById('ruleNumber'), checks.number);
+        setRequirementState(document.getElementById('ruleSpecial'), checks.special);
+
+        const forgotResetBtn = document.getElementById('forgotResetBtn');
+        if (forgotResetBtn) {
+            forgotResetBtn.disabled = !(isStrongPassword(password) && password === confirmPassword && confirmPassword);
         }
-    });
+    };
 
-    // Handle Registration Submit
-    if (regPopupForm) {
-        regPopupForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
+    if (forgotNewPassword) forgotNewPassword.addEventListener('input', syncForgotResetButton);
+    if (forgotConfirmPassword) forgotConfirmPassword.addEventListener('input', syncForgotResetButton);
 
-            const popupInputs = regPopupForm.querySelectorAll('.popup-input');
-            const fullName = popupInputs[0]?.value?.trim() || '';
-            const email = popupInputs[1]?.value?.trim() || '';
-            const password = popupInputs[2]?.value || '';
-            const confirmPassword = popupInputs[3]?.value || '';
+    [
+        ['toggleRegPassword', 'password'],
+        ['toggleLoginPassword', 'loginPassword'],
+        ['toggleForgotCode', 'forgotCode'],
+        ['toggleForgotNewPassword', 'forgotNewPassword'],
+        ['toggleForgotConfirmPassword', 'forgotConfirmPassword']
+    ].forEach(([toggleId, inputId]) => setToggleBehavior(toggleId, inputId));
 
-            if (password && confirmPassword && password !== confirmPassword) {
-                alert('Password and confirm password do not match.');
+    if (regSection && regOverlay) {
+        const OPEN_DELAY_MS = 10000;
+        let regModalTimer = null;
+        let lastScrollY = 0;
+        const isModalOpen = () => document.body.classList.contains('reg-modal-open');
+
+        regOverlay.hidden = true;
+
+        openRegModal = ({ preferLogin = localStorage.getItem('showLoginAfterLogout') === '1' } = {}) => {
+            if (isRegisteredUser()) {
+                openProfileDropdown();
                 return;
             }
 
-            // Attempt Firebase email signup if available.
-            if (firebaseReady && firebaseAuth && firestoreDb && email && password) {
+            if (regModalTimer) {
+                clearTimeout(regModalTimer);
+                regModalTimer = null;
+            }
+
+            showRegistrationSection({ preferLogin });
+            lastScrollY = window.scrollY || window.pageYOffset || 0;
+            regOverlay.hidden = false;
+
+            requestAnimationFrame(() => {
+                document.body.classList.add('reg-modal-open');
+            });
+
+            const firstInput = regSection.querySelector('input, button');
+            if (firstInput) {
+                setTimeout(() => firstInput.focus({ preventScroll: true }), 20);
+            }
+        };
+
+        closeRegModal = () => {
+            if (!isModalOpen()) return;
+            document.body.classList.remove('reg-modal-open');
+            regOverlay.hidden = true;
+            window.scrollTo({ top: lastScrollY, behavior: 'auto' });
+        };
+
+        window.__openRegModal = openRegModal;
+
+        if (!isRegisteredUser()) {
+            regModalTimer = setTimeout(() => openRegModal(), OPEN_DELAY_MS);
+        }
+
+        if (window.location.hash === '#registration-section' && !isRegisteredUser()) {
+            if (regModalTimer) {
+                clearTimeout(regModalTimer);
+                regModalTimer = null;
+            }
+            openRegModal({ preferLogin: localStorage.getItem('showLoginAfterLogout') === '1' });
+        }
+
+        if (regCloseBtn) regCloseBtn.addEventListener('click', closeRegModal);
+        regOverlay.addEventListener('click', closeRegModal);
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') closeRegModal();
+        });
+
+        document.querySelectorAll('a[href="#registration-section"], .register-scroll').forEach((element) => {
+            element.addEventListener('click', (event) => {
+                event.preventDefault();
+                if (isRegisteredUser()) {
+                    openProfileDropdown();
+                    return;
+                }
+                openRegModal({ preferLogin: localStorage.getItem('showLoginAfterLogout') === '1' });
+            });
+        });
+    }
+
+    if (authFooterAction) {
+        authFooterAction.addEventListener('click', () => {
+            const loginPanel = document.getElementById('loginPanel');
+            const loginVisible = !!(loginPanel && !loginPanel.hidden);
+            setAuthMode(loginVisible ? 'signup' : 'login');
+        });
+    }
+
+    if (forgotPasswordLink) {
+        forgotPasswordLink.addEventListener('click', () => {
+            setAuthMode('forgot');
+        });
+    }
+
+    if (forgotBackToLogin) {
+        forgotBackToLogin.addEventListener('click', () => {
+            resetForgotFlowState();
+            setAuthMode('login');
+        });
+    }
+
+    if (registrationForm) {
+        registrationForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const fullName = document.getElementById('fullName')?.value.trim() || '';
+            const email = document.getElementById('email')?.value.trim().toLowerCase() || '';
+            const phone = document.getElementById('phone')?.value.trim() || '';
+            const password = document.getElementById('password')?.value || '';
+
+            if (!fullName || !email || !phone || !password) {
+                alert('Please fill in all registration fields.');
+                return;
+            }
+
+            if (phone.length !== 10) {
+                alert('Please enter a valid 10-digit phone number.');
+                return;
+            }
+
+            if (!isStrongPassword(password)) {
+                alert('Please create a stronger password that meets all listed requirements.');
+                return;
+            }
+
+            if (findLocalAccount(email)) {
+                alert('An account with this email already exists. Please log in instead.');
+                setAuthMode('login');
+                const loginEmail = document.getElementById('loginEmail');
+                if (loginEmail) loginEmail.value = email;
+                return;
+            }
+
+            const submitBtn = registrationForm.querySelector('button[type="submit"]');
+            const originalText = submitBtn ? submitBtn.innerHTML : '';
+            if (submitBtn) {
+                submitBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Signing up...';
+                submitBtn.disabled = true;
+            }
+
+            try {
+                if (firebaseReady && firebaseAuth && firestoreDb) {
+                    try {
+                        const cred = await firebaseAuth.createUserWithEmailAndPassword(email, password);
+                        await firestoreDb.collection('users').doc(cred.user.uid).set({
+                            name: fullName,
+                            email,
+                            phone,
+                            provider: 'password',
+                            createdAt: window.firebase.firestore.FieldValue.serverTimestamp()
+                        }, { merge: true });
+                    } catch (authError) {
+                        console.warn('Firebase registration issue:', authError.message);
+                    }
+                }
+
+                upsertLocalAccount({ name: fullName, email, phone, password });
+                persistAuthUser({ name: fullName, email, phone });
+                syncRegistrationSectionForAuthState();
+                if (typeof closeRegModal === 'function') closeRegModal();
+            } finally {
+                if (submitBtn) {
+                    submitBtn.innerHTML = originalText || 'Sign up';
+                    submitBtn.disabled = false;
+                }
+            }
+        });
+    }
+
+    if (loginForm) {
+        loginForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const identifier = document.getElementById('loginEmail')?.value.trim() || '';
+            const password = document.getElementById('loginPassword')?.value || '';
+
+            if (!identifier || !password) {
+                alert('Please enter your email and password.');
+                return;
+            }
+
+            const localAccount = findLocalAccount(identifier);
+            let loggedIn = false;
+            let resolvedName = localAccount?.name || 'User';
+            let resolvedEmail = localAccount?.email || identifier;
+            let resolvedPhone = localAccount?.phone || '';
+
+            if (firebaseReady && firebaseAuth && identifier.includes('@')) {
                 try {
-                    const cred = await firebaseAuth.createUserWithEmailAndPassword(email, password);
+                    const cred = await firebaseAuth.signInWithEmailAndPassword(identifier, password);
+                    resolvedName = cred.user.displayName || resolvedName;
+                    resolvedEmail = cred.user.email || resolvedEmail;
+                    loggedIn = true;
+                } catch (authError) {
+                    console.warn('Firebase login issue:', authError.message);
+                }
+            }
+
+            if (!loggedIn && localAccount && localAccount.password === password) {
+                loggedIn = true;
+            }
+
+            if (!loggedIn) {
+                alert('We could not log you in with those credentials.');
+                return;
+            }
+
+            persistAuthUser({ name: resolvedName, email: resolvedEmail, phone: resolvedPhone });
+            syncRegistrationSectionForAuthState();
+            if (typeof closeRegModal === 'function') closeRegModal();
+        });
+    }
+
+    if (forgotSendCodeBtn) {
+        forgotSendCodeBtn.addEventListener('click', () => {
+            const forgotEmail = document.getElementById('forgotEmail')?.value.trim().toLowerCase() || '';
+            const account = findLocalAccount(forgotEmail);
+            if (!forgotEmail) {
+                alert('Please enter your email address first.');
+                return;
+            }
+            if (!account) {
+                alert('No local account was found with that email yet.');
+                return;
+            }
+
+            const code = String(Math.floor(100000 + Math.random() * 900000));
+            forgotCodeState = {
+                email: account.email,
+                code,
+                expiresAt: Date.now() + 60_000
+            };
+
+            const forgotCodeBlock = document.getElementById('forgotCodeBlock');
+            const forgotTimer = document.getElementById('forgotTimer');
+            if (forgotCodeBlock) forgotCodeBlock.hidden = false;
+            if (forgotTimer) forgotTimer.hidden = false;
+
+            if (forgotTimerInterval) clearInterval(forgotTimerInterval);
+            const renderTimer = () => {
+                if (!forgotTimer || !forgotCodeState) return;
+                const remainingMs = Math.max(0, forgotCodeState.expiresAt - Date.now());
+                const remainingSec = Math.ceil(remainingMs / 1000);
+                forgotTimer.textContent = remainingSec > 0
+                    ? `Demo code expires in ${remainingSec}s`
+                    : 'Verification code expired. Please request a new code.';
+
+                if (remainingSec <= 0 && forgotTimerInterval) {
+                    clearInterval(forgotTimerInterval);
+                    forgotTimerInterval = null;
+                }
+            };
+
+            renderTimer();
+            forgotTimerInterval = setInterval(renderTimer, 1000);
+            alert(`Demo reset code: ${code}`);
+        });
+    }
+
+    if (forgotVerifyCodeBtn) {
+        forgotVerifyCodeBtn.addEventListener('click', () => {
+            const forgotCode = document.getElementById('forgotCode')?.value.trim() || '';
+            const forgotPasswordFields = document.getElementById('forgotPasswordFields');
+
+            if (!forgotCodeState || Date.now() > forgotCodeState.expiresAt) {
+                alert('The verification code has expired. Please request a new one.');
+                resetForgotFlowState();
+                return;
+            }
+
+            if (forgotCode !== forgotCodeState.code) {
+                alert('Incorrect verification code.');
+                return;
+            }
+
+            if (forgotPasswordFields) forgotPasswordFields.hidden = false;
+            if (forgotNewPassword) forgotNewPassword.disabled = false;
+            if (forgotConfirmPassword) forgotConfirmPassword.disabled = false;
+            syncForgotResetButton();
+        });
+    }
+
+    if (forgotPasswordForm) {
+        forgotPasswordForm.addEventListener('submit', (event) => {
+            event.preventDefault();
+
+            if (!forgotCodeState) {
+                alert('Please verify your code before resetting the password.');
+                return;
+            }
+
+            const newPassword = forgotNewPassword?.value || '';
+            const confirmPassword = forgotConfirmPassword?.value || '';
+            if (!isStrongPassword(newPassword)) {
+                alert('Please create a stronger password that meets the listed rules.');
+                return;
+            }
+            if (newPassword !== confirmPassword) {
+                alert('Passwords do not match.');
+                return;
+            }
+
+            const accounts = getLocalAccounts();
+            const updatedAccounts = accounts.map((account) => (
+                account.email === forgotCodeState.email
+                    ? { ...account, password: newPassword }
+                    : account
+            ));
+            saveLocalAccounts(updatedAccounts);
+
+            const loginEmail = document.getElementById('loginEmail');
+            if (loginEmail) loginEmail.value = forgotCodeState.email;
+
+            resetForgotFlowState();
+            setAuthMode('login');
+            alert('Password reset complete. You can log in now.');
+        });
+    }
+
+    if (googleFallbackBtn) {
+        googleFallbackBtn.addEventListener('click', async () => {
+            if (!(firebaseReady && firebaseAuth && window.firebase?.auth?.GoogleAuthProvider)) {
+                alert('Google sign-in is not configured in this environment yet.');
+                return;
+            }
+
+            try {
+                const provider = new window.firebase.auth.GoogleAuthProvider();
+                const cred = await firebaseAuth.signInWithPopup(provider);
+                const fullName = cred.user.displayName || 'Google User';
+                const email = cred.user.email || '';
+
+                persistAuthUser({ name: fullName, email });
+                if (firestoreDb && cred.user?.uid) {
                     await firestoreDb.collection('users').doc(cred.user.uid).set({
                         name: fullName,
                         email,
-                        provider: 'password',
+                        provider: 'google',
                         createdAt: window.firebase.firestore.FieldValue.serverTimestamp()
                     }, { merge: true });
-                } catch (authError) {
-                    console.warn('Firebase registration issue:', authError.message);
                 }
-            }
-            
-            // Save state
-            // Save full user details for profile dropdown
-            localStorage.setItem('realcheck_user_v2', JSON.stringify({ name: fullName, email, role: '' }));
-            
-            // 1. Close Popup
-            regPopupOverlay.classList.remove('show');
-            updateProfileNav();
-            
 
+                syncRegistrationSectionForAuthState();
+                if (typeof closeRegModal === 'function') closeRegModal();
+            } catch (error) {
+                console.warn('Google sign-in failed:', error.message);
+                alert('Google sign-in could not be completed right now.');
+            }
         });
     }
 
@@ -998,39 +1546,134 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function formatJobDescription(description) {
         const raw = String(description || '').trim();
-        if (!raw) return 'No description provided by the employer.';
-        return raw;
+        if (!raw) return '<p>No description provided by the employer.</p>';
+
+        return escapeHtml(raw)
+            .split(/\n{2,}/)
+            .map(block => block.trim())
+            .filter(Boolean)
+            .map(block => `<p>${block.replace(/\n/g, '<br>')}</p>`)
+            .join('');
+    }
+
+    function formatDisplayText(value, fallback = 'Not specified') {
+        const raw = String(value || '').trim();
+        if (!raw) return fallback;
+        return raw
+            .replace(/[-_]+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .replace(/\b\w/g, (char) => char.toUpperCase());
+    }
+
+    function getRiskTone(score, status) {
+        const normalizedStatus = String(status || '').toLowerCase();
+        if (score >= 70 || normalizedStatus.includes('suspicious') || normalizedStatus.includes('high')) {
+            return 'high';
+        }
+        if (score >= 40 || normalizedStatus.includes('review') || normalizedStatus.includes('medium')) {
+            return 'medium';
+        }
+        return 'low';
+    }
+
+    function getApplyCta(url) {
+        try {
+            const host = new URL(url).hostname.replace(/^www\./, '');
+            return host ? `Apply on ${host}` : 'Apply now';
+        } catch {
+            return 'Apply now';
+        }
     }
 
     function showJobDetails(jobIndex) {
         const job = currentDisplayedJobs[jobIndex];
         if (!job || !jobModal || !jobModalBody) return;
 
+        const riskScore = Number.isFinite(job.riskScore) ? Math.max(0, Math.min(100, job.riskScore)) : 0;
+        const riskTone = getRiskTone(riskScore, job.status);
+        const safeTags = Array.isArray(job.tags) ? job.tags.filter(Boolean).slice(0, 6) : [];
+        const applyLabel = getApplyCta(job.apply_url);
+        const statusLabel = formatDisplayText(job.status || (riskTone === 'high' ? 'Suspicious' : riskTone === 'medium' ? 'Needs Review' : 'Safe'));
+        const roleLabel = formatDisplayText(job.role, 'General');
+        const salaryLabel = formatDisplayText(job.salary, 'Not disclosed');
+
         jobModalBody.innerHTML = `
-            <div class="modal-header">
-                <h2>${escapeHtml(job.position)}</h2>
-                <span class="company-tag">${escapeHtml(job.company)}</span>
-            </div>
-            <hr>
-            <div class="job-full-details">
-                <p><strong>Location:</strong> ${escapeHtml(job.location)}</p>
-                <p><strong>Category:</strong> ${escapeHtml(job.role || 'general')}</p>
-                <div class="description-box">
-                    ${formatJobDescription(job.description)}
+            <div class="job-modal-shell">
+                <div class="modal-header">
+                    <div class="job-modal-title-wrap">
+                        <span class="job-modal-kicker"><i class="fa-solid fa-briefcase"></i> Opportunity Overview</span>
+                        <h2 id="jobModalTitle">${escapeHtml(job.position)}</h2>
+                        <div class="job-modal-company-row">
+                            <span class="company-tag">${escapeHtml(job.company)}</span>
+                            <span class="job-modal-tag"><i class="fa-solid fa-signal"></i> ${statusLabel}</span>
+                        </div>
+                        <p class="job-modal-summary">Review the role details, trust signals, and source information before applying. RealCheck helps you slow down the sketchy ones.</p>
+                    </div>
+
+                    <div class="job-modal-risk ${riskTone}">
+                        <span class="job-modal-risk-label">Risk score</span>
+                        <div class="job-modal-risk-value">${riskScore}<small>/100</small></div>
+                        <div class="job-modal-risk-status">${statusLabel}</div>
+                    </div>
                 </div>
-                <center>
-                    <a href="${escapeHtml(job.apply_url)}" target="_blank" rel="noopener noreferrer" class="apply-btn-large apply-btn-main">Apply on RemoteOK</a>
-                </center>
+
+                <div class="job-full-details">
+                    <div class="job-modal-meta-grid">
+                        <div class="job-modal-meta-card">
+                            <div class="job-modal-meta-label"><i class="fa-solid fa-location-dot"></i> Location</div>
+                            <div class="job-modal-meta-value">${escapeHtml(formatDisplayText(job.location, 'Remote'))}</div>
+                        </div>
+                        <div class="job-modal-meta-card">
+                            <div class="job-modal-meta-label"><i class="fa-solid fa-layer-group"></i> Category</div>
+                            <div class="job-modal-meta-value">${escapeHtml(roleLabel)}</div>
+                        </div>
+                        <div class="job-modal-meta-card">
+                            <div class="job-modal-meta-label"><i class="fa-solid fa-wallet"></i> Salary</div>
+                            <div class="job-modal-meta-value">${escapeHtml(salaryLabel)}</div>
+                        </div>
+                        <div class="job-modal-meta-card">
+                            <div class="job-modal-meta-label"><i class="fa-solid fa-shield-halved"></i> Trust status</div>
+                            <div class="job-modal-meta-value">${escapeHtml(statusLabel)}</div>
+                        </div>
+                    </div>
+
+                    ${safeTags.length ? `
+                        <div class="job-modal-tags">
+                            ${safeTags.map(tag => `<span class="job-modal-tag">${escapeHtml(tag)}</span>`).join('')}
+                        </div>
+                    ` : ''}
+
+                    <div class="job-modal-section">
+                        <div class="job-modal-section-header">
+                            <h3>Role description</h3>
+                            <span>Always verify the employer domain before sharing personal details.</span>
+                        </div>
+                        <div class="description-box">
+                            ${formatJobDescription(job.description)}
+                        </div>
+                    </div>
+
+                    <div class="modal-actions">
+                        <a href="${escapeHtml(job.apply_url)}" target="_blank" rel="noopener noreferrer" class="apply-btn-large apply-btn-main">
+                            <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                            ${escapeHtml(applyLabel)}
+                        </a>
+                    </div>
+                </div>
             </div>
         `;
 
         jobModal.style.display = 'flex';
+        jobModal.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
     }
 
     function closeModal() {
         if (jobModal) {
             jobModal.style.display = 'none';
+            jobModal.setAttribute('aria-hidden', 'true');
         }
+        document.body.style.overflow = '';
     }
 
     window.openModal = showJobDetails;

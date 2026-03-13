@@ -39,17 +39,22 @@
 
       <div class="nav-links" id="navLinks">
         <a href="#hero" class="active">Home</a>
-        <a href="#instant-analyzer">Scam Detection</a>
-        <a href="#scam-detection">Scam Red Flags</a>
-        <a href="#real-opportunities">Real Internships / Jobs</a>
-        <a href="#scam-db">Scam Database</a>
-        <a href="#registration">Registration</a>
+        
+         <a href="#about">About</a>
+         
+         <a href="#instant-analyzer">Scam Detection</a>
+         
+        <a href="#real-opportunities">Real Jobs / Internships</a>
+        
+        <a href="#skill-gap-analyzer">Skill Gap Analyzer</a>
+     
+         <a href="#scam-db">Scam Database</a>
+       
       </div>
 
+      
+
       <div class="nav-actions">
-        <button class="theme-toggle-btn" id="themeToggleBtn" aria-label="Toggle light/dark mode">
-          <i class="fa-solid fa-sun" id="themeIcon"></i>
-        </button>
         <div class="profile-menu" id="profileMenu">
           <button class="profile-icon-btn" id="profileIconBtn" aria-label="Profile">
             <div class="profile-avatar" id="profileAvatar">
@@ -83,10 +88,49 @@
 
     </div>
   </section>
+<!-- ========== ABOUT SECTION ========== -->
+  <section class="trust-section section-bg reveal-section" id="about">
+    <div class="container">
+      <div class="section-header text-center reveal">
+        <span class="badge-primary">👋 About Us</span>
+        <h2>About RealCheck AI</h2>
+        <p>We're on a mission to eliminate fake job offers and protect students and job seekers from recruitment fraud.</p>
+      </div>
+      <div class="trust-grid">
+        <div class="trust-card reveal">
+          <div class="trust-icon"><i class="fa-solid fa-bullseye"></i></div>
+          <h3>Our Mission</h3>
+          <p>RealCheck AI was built to give every job seeker the confidence to apply — without fear of being scammed or deceived by fake recruiters.</p>
+        </div>
+        <div class="trust-card reveal">
+          <div class="trust-icon"><i class="fa-solid fa-users"></i></div>
+          <h3>Who We Serve</h3>
+          <p>Students, fresh graduates, and early-career professionals who are navigating the job market and need a trusted tool to verify opportunities.</p>
+        </div>
+        <div class="trust-card reveal">
+          <div class="trust-icon"><i class="fa-solid fa-microchip"></i></div>
+          <h3>Our Technology</h3>
+          <p>We combine AI-powered NLP, domain intelligence, and community-sourced scam reports to deliver fast, reliable fraud detection results.</p>
+        </div>
+        <div class="trust-card reveal">
+          <div class="trust-icon"><i class="fa-solid fa-handshake-simple"></i></div>
+          <h3>Always Free</h3>
+          <p>Our core scam detection tools are free for everyone. We believe safety in job searching should never come with a price tag.</p>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <!-- ========== INSTANT SCAM DETECTION ANALYZER ========== -->
   <section class="analyzer-section reveal-section" id="instant-analyzer">
-    <div id="scam-analyzer" style="font-family: 'Segoe UI', sans-serif; padding: 50px 0; background: #ffffff;">
+    <div class="container">
+      <div class="section-header text-center reveal" style="padding-top: 60px;">
+        <span class="badge-primary">🔍 AI-Powered Tool</span>
+        <h2>Scam Detection</h2>
+        <p>Paste any job offer, recruiter message, or company details — our AI instantly flags suspicious signals and scam patterns.</p>
+      </div>
+    </div>
+    <div id="scam-analyzer" style="font-family: 'Segoe UI', sans-serif; padding: 20px 0 50px; background: #ffffff;">
       <div style="max-width: 900px; margin: auto; padding: 40px; border: 1.5px solid #0056f7; border-radius: 25px; box-shadow: 0 10px 30px rgba(0, 86, 247, 0.05);">
 
         <h4 style="text-align: center; color: #0056f7; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;">⚡ Instant Analysis</h4>
@@ -98,7 +142,7 @@
           <textarea id="jobDetails" style="width: 100%; height: 150px; padding: 20px; border: 1.5px solid #0056f7; border-radius: 15px; font-size: 16px; outline: none; box-sizing: border-box;" placeholder="Paste everything here: job description, recruiter email, website URL/domain, salary, joining details, and any message text..."></textarea>
         </div>
 
-        <button onclick="runAnalysis()" id="analyzeBtn" style="width: 100%; padding: 18px; background: #2563eb; color: white; border: none; border-radius: 50px; font-size: 18px; font-weight: bold; cursor: pointer; transition: 0.3s; box-shadow: 0 5px 15px rgba(37, 99, 235, 0.3);">
+        <button onclick="runAnalysis()" id="analyzeBtn" style="width: auto; min-width: 200px; padding: 14px 40px; display: block; margin: 0 auto; background: #2563eb; color: white; border: none; border-radius: 50px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s; box-shadow: 0 5px 15px rgba(37, 99, 235, 0.3);">
           🔍 Analyze Now
         </button>
 
@@ -147,38 +191,8 @@
     </div>
   </section>
 
-  <!-- ========== SCAM DETECTION ========== -->
-  <section class="trust-section section-bg reveal-section" id="scam-detection">
-    <div class="container">
-      <div class="section-header text-center reveal">
-        <h2>Scam Detection Intelligence</h2>
-        <p>Our layered cybersecurity approach validates job communications before you engage with recruiters.</p>
-      </div>
-
-      <div class="trust-grid">
-        <div class="trust-card reveal">
-          <div class="trust-icon"><i class="fa-solid fa-globe"></i></div>
-          <h3>Domain Verification</h3>
-          <p>We verify domain age, DNS trust signals, and hosting patterns to identify suspicious websites.</p>
-        </div>
-        <div class="trust-card reveal">
-          <div class="trust-icon"><i class="fa-solid fa-building-circle-check"></i></div>
-          <h3>Company Validation</h3>
-          <p>Cross-checking recruiter claims with official registries and employer records.</p>
-        </div>
-        <div class="trust-card reveal">
-          <div class="trust-icon"><i class="fa-solid fa-robot"></i></div>
-          <h3>AI Message Analysis</h3>
-          <p>Detects fee demands, urgency manipulation, and known scam language patterns.</p>
-        </div>
-        <div class="trust-card reveal">
-          <div class="trust-icon"><i class="fa-solid fa-users"></i></div>
-          <h3>Community Alerts</h3>
-          <p>Real-time threat insights based on reports from students and job seekers.</p>
-        </div>
-      </div>
-    </div>
-  </section>
+ 
+  
 
   <!-- ========== SKILL GAP ANALYZER ========== -->
   <section class="skill-gap-section section-bg reveal-section" id="skill-gap-analyzer">
@@ -239,6 +253,47 @@
       </div>
     </div>
   </section>
+   <!-- ========== HOW IT WORKS ========== -->
+  <section class="trust-section section-bg reveal-section" id="scam-detection">
+    <div class="container">
+      <div class="section-header text-center reveal">
+        <span class="badge-primary">⚙️ How It Works</span>
+        <h2>How RealCheck AI Works</h2>
+        <p>From awareness to action, RealCheck AI helps you verify opportunities, build skills, and apply with confidence.</p>
+      </div>
+      <div class="how-flow reveal">
+        <div class="how-step">
+          <div class="how-step-dot">1</div>
+          <div class="how-step-content">
+            <h3><i class="fa-solid fa-book-open-reader"></i> Learn &amp; Prepare</h3>
+            <p>Start with About and Red Flags to understand common job scam patterns before evaluating any offer.</p>
+          </div>
+        </div>
+        <div class="how-step">
+          <div class="how-step-dot">2</div>
+          <div class="how-step-content">
+            <h3><i class="fa-solid fa-magnifying-glass-chart"></i> Verify Offers</h3>
+            <p>Use Scam Detection to analyze job messages, recruiter emails, and websites. Get an instant risk score and verdict.</p>
+          </div>
+        </div>
+        <div class="how-step">
+          <div class="how-step-dot">3</div>
+          <div class="how-step-content">
+            <h3><i class="fa-solid fa-briefcase"></i> Find &amp; Grow</h3>
+            <p>Explore Real Jobs / Internships and use Skill Gap Analyzer to build a focused learning roadmap for your target role.</p>
+          </div>
+        </div>
+        <div class="how-step">
+          <div class="how-step-dot">4</div>
+          <div class="how-step-content">
+            <h3><i class="fa-solid fa-shield-heart"></i> Stay Safe</h3>
+            <p>Check Scam Database before applying and report suspicious listings to strengthen community protection.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
 
   <!-- ========== SCAM DATABASE ========== -->
   <section class="database-section reveal-section" id="scam-db">
@@ -249,96 +304,203 @@
         <p>Search our database of reported companies, fake recruiters, and known scam websites.</p>
       </div>
 
-      <div class="search-bar-container reveal">
-        <i class="fa-solid fa-search"></i>
-        <input type="text" id="dbSearch" placeholder="Search company name, email, or domain..." />
-        <button class="btn btn-primary">Search</button>
-      </div>
+      <div class="database-card reveal">
+        <div class="search-bar-container">
+          <i class="fa-solid fa-search"></i>
+          <input type="text" id="dbSearch" placeholder="Search company name, email, or domain..." />
+          <button class="btn btn-primary">Search</button>
+        </div>
 
-      <div class="db-table-container reveal">
-        <table class="db-table">
-          <thead>
-            <tr>
-              <th>Company Name</th>
-              <th>Scam Description</th>
-              <th>Reports</th>
-              <th>Risk Score</th>
-              <th>Date</th>
-            </tr>
-          </thead>
-          <tbody id="scamDbBody">
-            <tr id="scamDbLoading">
-              <td colspan="5" style="text-align:center; padding: 32px; color: var(--text-muted);">
-                <i class="fa-solid fa-circle-notch fa-spin"></i> Loading reports...
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="db-table-container">
+          <table class="db-table">
+            <thead>
+              <tr>
+                <th>Company Name</th>
+                <th>Scam Description</th>
+                <th>Reports</th>
+                <th>Risk Score</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody id="scamDbBody">
+              <tr id="scamDbLoading">
+                <td colspan="5" style="text-align:center; padding: 32px; color: var(--text-muted);">
+                  <i class="fa-solid fa-circle-notch fa-spin"></i> Loading reports...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   </section>
 
   <!-- ========== REGISTRATION SECTION ========== -->
-  <section class="report-section section-bg reveal-section" id="registration">
-    <div class="container report-grid">
-      <div class="report-info reveal">
-        <h2>Registration</h2>
-        <p>Create your RealCheck AI account to receive scam alerts, save analysis history, and get trusted internship and job updates.</p>
-        
-        <div class="report-stats">
-          <div class="stat-box">
-            <h4>120K+</h4>
-            <p>Users Protected</p>
-          </div>
-          <div class="stat-box">
-            <h4>98%</h4>
-            <p>Detection Accuracy</p>
-          </div>
+  <section class="reg-main-container reveal-section" id="registration-section">
+    <div class="reg-flex-card">
+      <div class="reg-left-side">
+        <img
+          src="di.JPEG"
+          alt="Student Assisted"
+          class="reg-illustration"
+        >
+        <div class="reg-left-overlay"></div>
+        <div class="reg-text-overlay">
+          <h2 class="white-text">RealCheck AI</h2>
+          <h2 class="orange-text">Stop Scams, Start Your Real Career</h2>
+          <p>"Verify job legitimacy instantly with AI-powered fraud detection to secure your career."</p>
         </div>
       </div>
 
-      <div class="report-form-card reveal">
-        <form id="reportForm">
-          <div class="form-grid">
-            <div class="form-group">
-              <label>Full Name</label>
-              <input type="text" required placeholder="Enter your full name">
+      <div class="reg-right-side">
+        <button type="button" class="reg-modal-close" id="regModalClose" aria-label="Close registration">
+          &times;
+        </button>
+
+        <div id="signupPanel" class="auth-panel">
+          <h1 class="reg-header">Register Here</h1>
+          <p class="reg-sub-header">Start your journey with us</p>
+
+          <form id="registrationForm" class="reg-form-logic" autocomplete="off">
+            <input type="text" style="display:none" tabindex="-1" aria-hidden="true">
+            <input type="password" style="display:none" tabindex="-1" aria-hidden="true">
+            <div class="reg-input-group">
+              <i class="fas fa-user"></i>
+              <input type="text" id="fullName" name="fullName" placeholder="Enter your Name" required autocomplete="off" readonly onfocus="this.removeAttribute('readonly')">
             </div>
-            <div class="form-group">
-              <label>Email Address</label>
-              <input type="email" required placeholder="you@example.com">
+
+            <div class="reg-input-group">
+              <i class="fas fa-envelope"></i>
+              <input type="email" id="email" name="email" placeholder="Enter your Email" required autocomplete="off" readonly onfocus="this.removeAttribute('readonly')">
             </div>
-          </div>
-          
-          <div class="form-group">
-            <label>Role</label>
-            <select required>
-              <option value="" disabled selected>Select your role</option>
-              <option>Student</option>
-              <option>Fresher / Entry-Level Professional</option>
-              <option>Working Professional</option>
-            </select>
-          </div>
 
-          <div class="form-group">
-            <label>Password</label>
-            <input type="password" required placeholder="Create a strong password">
-          </div>
+            <div class="reg-input-group">
+              <i class="fas fa-phone"></i>
+              <input type="tel" id="phone" name="phone" placeholder="+91 Enter your Phone" maxlength="10" required autocomplete="off" readonly onfocus="this.removeAttribute('readonly')">
+            </div>
 
-          <div class="form-group">
-            <label>Career Interests</label>
-            <textarea required rows="4" placeholder="Tell us the job roles and industries you are interested in..."></textarea>
-          </div>
+            <div class="reg-input-group reg-input-group--password">
+              <i class="fas fa-lock"></i>
+              <input type="password" id="password" name="password" placeholder="Create Password" required autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" class="with-toggle">
+              <i class="fas fa-eye toggle-password" id="toggleRegPassword" aria-label="Toggle password visibility"></i>
+            </div>
 
-          <button type="submit" class="btn btn-primary w-100">Create Account</button>
-        </form>
-        <div id="reportSuccess" class="success-msg" style="display:none;">
-          <i class="fa-solid fa-circle-check"></i> Registration successful. Welcome to RealCheck AI.
+            <div class="password-dropdown" id="passwordRequirementsBox" hidden>
+              <p class="requirement-title">Password must contain:</p>
+              <div class="requirement" id="req-uppercase"><i class="fas fa-circle-check req-icon"></i><i class="fas fa-circle req-icon-off"></i> Uppercase letter (A-Z)</div>
+              <div class="requirement" id="req-lowercase"><i class="fas fa-circle-check req-icon"></i><i class="fas fa-circle req-icon-off"></i> Lowercase letter (a-z)</div>
+              <div class="requirement" id="req-number"><i class="fas fa-circle-check req-icon"></i><i class="fas fa-circle req-icon-off"></i> Number (0-9)</div>
+              <div class="requirement" id="req-special"><i class="fas fa-circle-check req-icon"></i><i class="fas fa-circle req-icon-off"></i> Special character (!@#$%^&amp;*)</div>
+              <div class="requirement" id="req-length"><i class="fas fa-circle-check req-icon"></i><i class="fas fa-circle req-icon-off"></i> At least 8 characters</div>
+            </div>
+
+            <button type="submit" class="reg-btn-orange">Sign up</button>
+          </form>
+        </div>
+
+        <div id="loginPanel" class="auth-panel" hidden>
+          <h1 class="reg-header">Log in</h1>
+          <p class="reg-sub-header">Welcome back</p>
+
+          <form id="loginForm" class="reg-form-logic" autocomplete="off">
+            <input type="text" style="display:none" tabindex="-1" aria-hidden="true">
+            <input type="password" style="display:none" tabindex="-1" aria-hidden="true">
+            <div class="reg-input-group">
+              <i class="fas fa-envelope"></i>
+              <input type="email" id="loginEmail" name="loginEmail" placeholder="Enter your Gmail or username" required autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" autocapitalize="off" autocorrect="off" spellcheck="false">
+            </div>
+
+            <div class="reg-input-group">
+              <i class="fas fa-lock"></i>
+              <input type="password" id="loginPassword" name="loginPassword" placeholder="Enter your Password" required autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" class="with-toggle">
+              <i class="fas fa-eye toggle-password" id="toggleLoginPassword" aria-label="Toggle password visibility"></i>
+            </div>
+
+            <button type="submit" class="reg-btn-orange">Log in</button>
+          </form>
+
+          <button type="button" class="forgot-password-link" id="forgotPasswordLink">Forgot password?</button>
+        </div>
+
+        <div id="forgotPanel" class="auth-panel" hidden>
+          <h1 class="reg-header">Forgot Password</h1>
+          <p class="reg-sub-header">Reset your password</p>
+
+          <form id="forgotPasswordForm" class="reg-form-logic" autocomplete="off">
+            <div id="forgotStep1">
+              <div class="reg-input-group">
+                <i class="fas fa-envelope"></i>
+                <input type="email" id="forgotEmail" name="forgotEmail" placeholder="Enter your Email" required autocomplete="off">
+              </div>
+
+              <button type="button" class="reg-btn-orange" id="forgotSendCodeBtn">Send Code</button>
+
+              <div id="forgotTimer" class="forgot-timer" hidden></div>
+
+              <div id="forgotCodeBlock" hidden>
+                <div class="reg-input-group reg-gap-top">
+                  <i class="fas fa-key"></i>
+                  <input type="password" id="forgotCode" name="forgotCode" placeholder="Enter 6-digit code" inputmode="numeric" autocomplete="one-time-code" required class="with-toggle">
+                  <i class="fas fa-eye toggle-password" id="toggleForgotCode" aria-label="Toggle verification code visibility"></i>
+                </div>
+
+                <button type="button" class="reg-btn-orange reg-gap-top" id="forgotVerifyCodeBtn">Submit</button>
+              </div>
+            </div>
+
+            <div id="forgotPasswordFields" hidden>
+              <div id="passwordRules" class="reg-password-box forgot-password-box">
+                <p class="requirement-title">Password must contain:</p>
+                <ul>
+                  <li id="ruleLength" class="password-rule">At least 8 characters</li>
+                  <li id="ruleUpper" class="password-rule">One uppercase letter</li>
+                  <li id="ruleLower" class="password-rule">One lowercase letter</li>
+                  <li id="ruleNumber" class="password-rule">One number</li>
+                  <li id="ruleSpecial" class="password-rule">One special character (!@#$%^&amp;*)</li>
+                </ul>
+              </div>
+
+              <div class="reg-input-group">
+                <i class="fas fa-lock"></i>
+                <input type="password" id="forgotNewPassword" name="forgotNewPassword" placeholder="New Password" required disabled autocomplete="new-password" class="with-toggle">
+                <i class="fas fa-eye toggle-password" id="toggleForgotNewPassword" aria-label="Toggle new password visibility"></i>
+              </div>
+
+              <div class="reg-input-group">
+                <i class="fas fa-lock"></i>
+                <input type="password" id="forgotConfirmPassword" name="forgotConfirmPassword" placeholder="Confirm New Password" required disabled autocomplete="new-password" class="with-toggle">
+                <i class="fas fa-eye toggle-password" id="toggleForgotConfirmPassword" aria-label="Toggle confirm password visibility"></i>
+              </div>
+
+              <button type="submit" class="reg-btn-orange" id="forgotResetBtn" disabled>Reset Password</button>
+            </div>
+          </form>
+
+          <button type="button" class="forgot-back-link" id="forgotBackToLogin">Back to Log in</button>
+        </div>
+
+        <div id="authSocialBlock">
+          <div class="reg-social-divider">
+            <span>Or continue with</span>
+          </div>
+          <div class="reg-social-row">
+            <div id="googleBtn" hidden></div>
+            <button type="button" id="googleFallbackBtn" class="social-box" aria-label="Sign in with Google">
+              <i class="fa-brands fa-google"></i>
+              Sign in with Google
+            </button>
+          </div>
+        </div>
+
+        <div class="auth-footer">
+          <span id="authFooterText">Already have an account?</span>
+          <button type="button" class="auth-footer-btn" id="authFooterAction">Log in</button>
         </div>
       </div>
     </div>
   </section>
 
+  
   <!-- ========== FOOTER ========== -->
   <footer class="footer">
     <div class="container footer-grid">
@@ -397,32 +559,12 @@
   <script src="https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore-compat.js"></script>
   <script src="script.js"></script>
 
-  <!-- ========== REGISTRATION POPUP ========== -->
-  <div class="reg-popup-overlay" id="regPopupOverlay">
-    <div class="reg-popup-card">
-      <div class="reg-popup-left">
-        <img src="https://img.freepik.com/free-vector/cyber-security-concept_23-2148533314.jpg?w=1060&t=st=1697207604~exp=1697208204~hmac=50e41ba9258d4a974b7c62bb95be6fa2ab5ad463ddef5b33101fd902c34a1795" alt="AI Security Illustration">
-      </div>
-      <div class="reg-popup-right">
-        <button class="close-popup-btn" id="closePopupBtn"><i class="fa-solid fa-xmark"></i></button>
-        <h3>Create Account</h3>
-        <p>Join RealCheck AI today.</p>
-        <form id="regPopupForm">
-          <input type="text" placeholder="Full Name" required class="popup-input">
-          <input type="email" placeholder="Email" required class="popup-input">
-          <input type="password" placeholder="Password" required class="popup-input">
-          <input type="password" placeholder="Confirm Password" required class="popup-input">
-          <button type="submit" class="btn btn-primary w-100">Create Account</button>
-        </form>
-        <p class="login-link">Already have an account? <a href="#">Login</a></p>
-      </div>
-    </div>
-  </div>
+  <div id="regModalOverlay" class="reg-modal-overlay" hidden></div>
 
   <!-- ========== JOB DETAILS MODAL ========== -->
-  <div id="jobModal" class="modal">
-    <div class="modal-content glass">
-      <span class="close-btn" id="closeJobModal" onclick="closeModal()">&times;</span>
+  <div id="jobModal" class="modal" aria-hidden="true">
+    <div class="modal-content glass" role="dialog" aria-modal="true" aria-labelledby="jobModalTitle">
+      <button type="button" class="close-btn" id="closeJobModal" aria-label="Close job details">&times;</button>
       <div id="modal-body"></div>
     </div>
   </div>
