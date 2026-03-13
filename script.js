@@ -14,6 +14,69 @@ const observerOptions = {
     rootMargin: "0px 0px -50px 0px"
 };
 
+let firebaseAuth = null;
+let firestoreDb = null;
+let firebaseReady = false;
+
+async function initFirebase() {
+    if (firebaseReady || !window.firebase) return firebaseReady;
+
+    try {
+        const response = await fetch('/api/firebase-config');
+        if (!response.ok) {
+            throw new Error(`Firebase config error: ${response.status}`);
+        }
+
+        const firebaseConfig = await response.json();
+
+        if (!window.firebase.apps.length) {
+            window.firebase.initializeApp(firebaseConfig);
+        }
+
+        firebaseAuth = window.firebase.auth();
+        firestoreDb = window.firebase.firestore();
+
+        // Keep a signed-in session for Firestore rules that require auth.
+        if (!firebaseAuth.currentUser) {
+            try {
+                await firebaseAuth.signInAnonymously();
+            } catch (authError) {
+                console.warn('Anonymous Firebase sign-in failed:', authError.message);
+            }
+        }
+
+        firebaseReady = true;
+    } catch (error) {
+        console.warn('Firebase initialization skipped:', error.message);
+    }
+
+    return firebaseReady;
+}
+
+async function saveAnalysisToFirestore(payload, result) {
+    if (!firebaseReady || !firestoreDb) return;
+
+    try {
+        const user = firebaseAuth ? firebaseAuth.currentUser : null;
+        const uid = user ? user.uid : null;
+
+        if (!uid) return;
+
+        await firestoreDb.collection('analyses').add({
+            uid,
+            jobMessage: payload.message || '',
+            recruiterEmail: payload.email || '',
+            companyWebsite: payload.website || '',
+            risk: result.risk || 'Low',
+            score: Number.isFinite(result.score) ? result.score : 0,
+            reasons: Array.isArray(result.reasons) ? result.reasons : [],
+            createdAt: window.firebase.firestore.FieldValue.serverTimestamp()
+        });
+    } catch (error) {
+        console.warn('Could not save analysis to Firestore:', error.message);
+    }
+}
+
 const observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
         if (entry.isIntersecting) {
@@ -95,6 +158,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const toast = document.getElementById('toastNotification');
     const isRegistered = localStorage.getItem('realcheck_user_v2');
 
+    initFirebase();
+
     // 1. Splash Screen Fade Out after 3 seconds
     setTimeout(() => {
         if (splash) {
@@ -125,8 +190,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Handle Registration Submit
     if (regPopupForm) {
-        regPopupForm.addEventListener('submit', (e) => {
+        regPopupForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+
+            const popupInputs = regPopupForm.querySelectorAll('.popup-input');
+            const fullName = popupInputs[0]?.value?.trim() || '';
+            const email = popupInputs[1]?.value?.trim() || '';
+            const password = popupInputs[2]?.value || '';
+            const confirmPassword = popupInputs[3]?.value || '';
+
+            if (password && confirmPassword && password !== confirmPassword) {
+                alert('Password and confirm password do not match.');
+                return;
+            }
+
+            // Attempt Firebase email signup if available.
+            if (firebaseReady && firebaseAuth && firestoreDb && email && password) {
+                try {
+                    const cred = await firebaseAuth.createUserWithEmailAndPassword(email, password);
+                    await firestoreDb.collection('users').doc(cred.user.uid).set({
+                        name: fullName,
+                        email,
+                        provider: 'password',
+                        createdAt: window.firebase.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
+                } catch (authError) {
+                    console.warn('Firebase registration issue:', authError.message);
+                }
+            }
             
             // Save state
             localStorage.setItem('realcheck_user_v2', 'registered');
@@ -199,16 +290,18 @@ document.addEventListener('DOMContentLoaded', () => {
             analyzeSubmitBtn.disabled = true;
 
             try {
-                const response = await fetch('http://localhost:5000/api/analyze-job', {
+                const payload = {
+                    message,
+                    email,
+                    website
+                };
+
+                const response = await fetch('/api/analyze-job', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({
-                        message,
-                        email,
-                        website
-                    })
+                    body: JSON.stringify(payload)
                 });
 
                 if (!response.ok) {
@@ -216,6 +309,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 const result = await response.json();
+
+                await initFirebase();
+                await saveAnalysisToFirestore(payload, result);
 
                 riskBadge.className = `risk-badge risk-${String(result.risk || 'Low').toLowerCase()}`;
                 riskBadge.textContent = `${String(result.risk || 'Low')} Risk`;
@@ -240,7 +336,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 analysisResults.scrollIntoView({ behavior: 'smooth', block: 'center' });
             } catch (error) {
                 console.error('Analysis error:', error);
-                alert('Could not analyze right now. Please confirm backend is running on localhost:5000.');
+                alert('Could not analyze right now. Please confirm backend is running on port 5000.');
             } finally {
                 analyzeSubmitBtn.innerHTML = originalText;
                 analyzeSubmitBtn.disabled = false;
