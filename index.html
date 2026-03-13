@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="RealCheck AI — Verify Job Offers Before You Apply. Detect fake job offers, analyze internships, and find verified opportunities." />
+  <title>RealCheck AI — Verify Job Offers Before You Apply</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <link rel="stylesheet" href="style.css" />
+  <link rel="icon" href="assets/logo.png" type="image/png" />
+</head>
+<body>
+
+  <!-- ========== SPLASH SCREEN ========== -->
+  <div class="splash-screen" id="splashScreen">
+    <div class="splash-content">
+      <img src="assets/logo.png" alt="RealCheck AI Logo" class="splash-logo" />
+      <h2>RealCheck <span>AI</span></h2>
+      <p>Verify Job Offers Before You Apply</p>
+    </div>
+  </div>
+
+  <!-- ========== NAVIGATION BAR ========== -->
+  <nav class="navbar" id="navbar">
+    <div class="nav-container">
+      <a href="#" class="nav-brand">
+        <div class="logo-box">
+          <i class="fa-solid fa-shield-halved"></i>
+        </div>
+        RealCheck <span>AI</span>
+      </a>
+
+      <div class="nav-links" id="navLinks">
+        <a href="#hero" class="active">Home</a>
+        <a href="#scam-detection-tips">Scam Red Flags</a>
+        <a href="#scam-detection">Scam Detection</a>
+        <a href="#real-opportunities">Real Internships / Jobs</a>
+        <a href="#scam-db">Scam Database</a>
+        <a href="#registration">Registration</a>
+      </div>
+
+      <div class="nav-actions">
+        <button class="btn btn-ghost">Login</button>
+        <button class="btn btn-primary">Register</button>
+        <button class="mobile-menu-btn" id="mobileMenuBtn">
+          <i class="fa-solid fa-bars"></i>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ========== HERO SECTION ========== -->
+  <section class="hero" id="hero">
+    <div class="container hero-grid">
+      <div class="hero-content reveal">
+        <div class="hero-badge">
+          <span class="pulse-dot"></span>
+          Cybersecurity AI Platform
+        </div>
+        <h1>RealCheck AI</h1>
+        <h2 class="hero-subtitle">Verify Internships & Jobs Before You Apply</h2>
+        <p>Professional AI-powered fraud analysis for students and job seekers. Detect scam signals instantly.</p>
+        <button class="btn btn-primary btn-lg">Start Analysis</button>
+      </div>
+      <div class="hero-image reveal" style="transition-delay: 0.2s;">
+        <img src="https://img.freepik.com/free-vector/cyber-security-concept_23-2148533314.jpg?w=1060&t=st=1697207604~exp=1697208204~hmac=50e41ba9258d4a974b7c62bb95be6fa2ab5ad463ddef5b33101fd902c34a1795" alt="Cybersecurity AI">
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== INSTANT SCAM DETECTION ANALYZER ========== -->
+  <section class="analyzer-section" id="instant-analyzer">
+    <div class="container">
+      <div class="section-header text-center reveal">
+        <span class="badge-primary">⚡ Instant Analysis</span>
+        <h2>Check Any Job Offer Instantly</h2>
+        <p>Paste a job message, recruiter email, or company website and get AI-powered scam detection results in seconds.</p>
+      </div>
+
+      <div class="analyzer-container reveal">
+        <div class="analyzer-box">
+          <form id="scamAnalyzerForm">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="jobMessage">Job Message or Offer Details</label>
+                <textarea id="jobMessage" name="message" placeholder="Paste the job offer message, internship details, or recruitment email here..." rows="6"></textarea>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="recruiterEmail">Recruiter Email</label>
+                <input type="email" id="recruiterEmail" name="email" placeholder="e.g., hr@company.com or hr.recruiter@gmail.com">
+              </div>
+              <div class="form-group">
+                <label for="companyWebsite">Company Website / Domain</label>
+                <input type="url" id="companyWebsite" name="website" placeholder="e.g., zencompany.com or https://company.com">
+              </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-lg" id="analyzeSubmitBtn">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              Analyze Now
+            </button>
+          </form>
+
+          <!-- Results Section -->
+          <div id="analysisResults" class="analysis-results" style="display: none;">
+            <div class="result-header">
+              <h3>Analysis Results</h3>
+              <button type="button" class="btn-close" onclick="document.getElementById('analysisResults').style.display='none';">✕</button>
+            </div>
+
+            <div class="risk-indicator">
+              <div class="risk-badge risk-low" id="riskBadge">Low Risk</div>
+              <div class="risk-score">
+                <span class="score-label">Risk Score:</span>
+                <span class="score-value" id="riskScore">0</span><span class="score-unit">/100</span>
+              </div>
+            </div>
+
+            <div class="reasons-box">
+              <h4>Detection Results:</h4>
+              <ul id="reasonsList" class="reasons-list">
+              </ul>
+            </div>
+
+            <div class="result-footer">
+              <p class="result-note"><i class="fa-solid fa-circle-info"></i> These results are based on keyword analysis and domain verification.</p>
+              <button type="button" class="btn btn-secondary" onclick="document.getElementById('analysisResults').style.display='none';">Analyze Another</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== REAL INTERNSHIPS & JOBS ========== -->
+  <section class="jobs-section" id="real-opportunities">
+    <div class="container">
+      <div class="section-header reveal">
+        <h2>Internships</h2>
+        <p>Verified opportunities from trusted companies</p>
+      </div>
+
+      <!-- Filter Pills -->
+      <div class="filter-pills reveal">
+        <button class="filter-pill active">Big brands</button>
+        <button class="filter-pill">Work from home</button>
+        <button class="filter-pill">Part-time</button>
+        <button class="filter-pill">MBA</button>
+        <button class="filter-pill">Engineering</button>
+        <button class="filter-pill">Media</button>
+        <button class="filter-pill">Design</button>
+        <button class="filter-pill">Data Science</button>
+      </div>
+
+      <!-- Job Cards Grid -->
+      <div class="job-grid">
+        <!-- Card 1 -->
+        <div class="job-card reveal">
+          <div class="job-card-top">
+            <div class="job-company-row">
+              <div class="company-logo-sm">PC</div>
+              <div class="job-company-text">
+                <h4>Paracoat Products Limited</h4>
+                <span class="actively-hiring"><i class="fa-solid fa-circle"></i> Actively hiring</span>
+              </div>
+            </div>
+            <span class="job-type-badge">Internship</span>
+          </div>
+
+          <h3 class="job-title-clean">Graphic Design</h3>
+
+          <div class="job-meta-row">
+            <span class="meta-item"><i class="fa-solid fa-location-dot"></i> Gurgaon, Delhi, Noida</span>
+          </div>
+
+          <div class="job-meta-row">
+            <span class="meta-item"><i class="fa-solid fa-indian-rupee"></i> ₹10,000 /month</span>
+            <span class="meta-item"><i class="fa-solid fa-calendar"></i> 6 Months</span>
+          </div>
+
+          <div class="job-card-footer">
+            <span class="job-label">Internship</span>
+            <a href="#" class="view-details">View details <i class="fa-solid fa-chevron-right"></i></a>
+          </div>
+        </div>
+
+        <!-- Card 2 -->
+        <div class="job-card reveal">
+          <div class="job-card-top">
+            <div class="job-company-row">
+              <div class="company-logo-sm" style="background: #F0F0F0; color: var(--primary);">CS</div>
+              <div class="job-company-text">
+                <h4>Credit Saison (India)</h4>
+                <span class="actively-hiring"><i class="fa-solid fa-circle"></i> Actively hiring</span>
+              </div>
+            </div>
+            <span class="job-type-badge">Internship</span>
+          </div>
+
+          <h3 class="job-title-clean">Content Writing</h3>
+
+          <div class="job-meta-row">
+            <span class="meta-item"><i class="fa-solid fa-location-dot"></i> Bangalore (Hybrid)</span>
+          </div>
+
+          <div class="job-meta-row">
+            <span class="meta-item"><i class="fa-solid fa-indian-rupee"></i> ₹15,000 - 20,000 /month</span>
+            <span class="meta-item"><i class="fa-solid fa-calendar"></i> 2 Months</span>
+          </div>
+
+          <div class="job-card-footer">
+            <span class="job-label">Internship</span>
+            <a href="#" class="view-details">View details <i class="fa-solid fa-chevron-right"></i></a>
+          </div>
+        </div>
+
+        <!-- Card 3 -->
+        <div class="job-card reveal">
+          <div class="job-card-top">
+            <div class="job-company-row">
+              <div class="company-logo-sm" style="background: #E8D5C4;">IGP</div>
+              <div class="job-company-text">
+                <h4>Indian Gifts Portal</h4>
+                <span class="actively-hiring"><i class="fa-solid fa-circle"></i> Actively hiring</span>
+              </div>
+            </div>
+            <span class="job-type-badge">Internship</span>
+          </div>
+
+          <h3 class="job-title-clean">Category</h3>
+
+          <div class="job-meta-row">
+            <span class="meta-item"><i class="fa-solid fa-location-dot"></i> Mumbai</span>
+          </div>
+
+          <div class="job-meta-row">
+            <span class="meta-item"><i class="fa-solid fa-indian-rupee"></i> ₹12,000 - 15,000 /month</span>
+            <span class="meta-item"><i class="fa-solid fa-calendar"></i> 3 Months</span>
+          </div>
+
+          <div class="job-card-footer">
+            <span class="job-label">Internship</span>
+            <a href="#" class="view-details">View details <i class="fa-solid fa-chevron-right"></i></a>
+          </div>
+        </div>
+
+        <!-- Card 4 -->
+        <div class="job-card reveal">
+          <div class="job-card-top">
+            <div class="job-company-row">
+              <div class="company-logo-sm" style="background: var(--primary); color: white;">AGG</div>
+              <div class="job-company-text">
+                <h4>AECC Global</h4>
+                <span class="actively-hiring"><i class="fa-solid fa-circle"></i> Actively hiring</span>
+              </div>
+            </div>
+            <span class="job-type-badge">Internship</span>
+          </div>
+
+          <h3 class="job-title-clean">Telecalling</h3>
+
+          <div class="job-meta-row">
+            <span class="meta-item"><i class="fa-solid fa-location-dot"></i> Delhi, Gurgaon</span>
+          </div>
+
+          <div class="job-meta-row">
+            <span class="meta-item"><i class="fa-solid fa-indian-rupee"></i> ₹15,000 /month</span>
+            <span class="meta-item"><i class="fa-solid fa-calendar"></i> 3 Months</span>
+          </div>
+
+          <div class="job-card-footer">
+            <span class="job-label">Internship</span>
+            <a href="#" class="view-details">View details <i class="fa-solid fa-chevron-right"></i></a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pagination -->
+      <div class="job-pagination reveal">
+        <button class="pagination-btn"><i class="fa-solid fa-chevron-left"></i></button>
+        <div class="pagination-dots">
+          <span class="dot active"></span>
+          <span class="dot"></span>
+        </div>
+        <button class="pagination-btn"><i class="fa-solid fa-chevron-right"></i></button>
+      </div>
+    </div>
+  </section>
+   <!-- ========== SCAM DETECTION ========== -->
+  <section class="trust-section section-bg" id="scam-detection">
+    <div class="container">
+      <div class="section-header text-center reveal">
+        <h2>Scam Detection Intelligence</h2>
+        <p>Our layered cybersecurity approach validates job communications before you engage with recruiters.</p>
+      </div>
+
+      <div class="trust-grid">
+        <div class="trust-card reveal">
+          <div class="trust-icon"><i class="fa-solid fa-globe"></i></div>
+          <h3>Domain Verification</h3>
+          <p>We verify domain age, DNS trust signals, and hosting patterns to identify suspicious websites.</p>
+        </div>
+        <div class="trust-card reveal">
+          <div class="trust-icon"><i class="fa-solid fa-building-circle-check"></i></div>
+          <h3>Company Validation</h3>
+          <p>Cross-checking recruiter claims with official registries and employer records.</p>
+        </div>
+        <div class="trust-card reveal">
+          <div class="trust-icon"><i class="fa-solid fa-robot"></i></div>
+          <h3>AI Message Analysis</h3>
+          <p>Detects fee demands, urgency manipulation, and known scam language patterns.</p>
+        </div>
+        <div class="trust-card reveal">
+          <div class="trust-icon"><i class="fa-solid fa-users"></i></div>
+          <h3>Community Alerts</h3>
+          <p>Real-time threat insights based on reports from students and job seekers.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== SCAM DATABASE ========== -->
+  <section class="database-section" id="scam-db">
+    <div class="container">
+      <div class="section-header text-center reveal">
+        <span class="badge-danger">Fraud Watch</span>
+        <h2>Scam Database</h2>
+        <p>Search our database of reported companies, fake recruiters, and known scam websites.</p>
+      </div>
+
+      <div class="search-bar-container reveal">
+        <i class="fa-solid fa-search"></i>
+        <input type="text" id="dbSearch" placeholder="Search company name, email, or domain..." />
+        <button class="btn btn-primary">Search</button>
+      </div>
+
+      <div class="db-table-container reveal">
+        <table class="db-table">
+          <thead>
+            <tr>
+              <th>Company Name</th>
+              <th>Scam Description</th>
+              <th>Reports</th>
+              <th>Risk Score</th>
+              <th>Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>TechHire Solutions (Fake)</strong></td>
+              <td>Asking for ₹2000 registration fee before interview.</td>
+              <td><span class="db-reports">124</span></td>
+              <td><span class="status-badge red">High Risk</span></td>
+              <td>Oct 12, 2026</td>
+            </tr>
+            <tr>
+              <td><strong>GlobalData Corp</strong></td>
+              <td>Sending fake offer letters via Gmail address.</td>
+              <td><span class="db-reports">89</span></td>
+              <td><span class="status-badge red">High Risk</span></td>
+              <td>Oct 10, 2026</td>
+            </tr>
+            <tr>
+              <td><strong>Unknown Recruiter (LinkedIn)</strong></td>
+              <td>Phishing link for "assessment portal".</td>
+              <td><span class="db-reports">45</span></td>
+              <td><span class="status-badge yellow">Suspicious</span></td>
+              <td>Oct 08, 2026</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== REGISTRATION SECTION ========== -->
+  <section class="report-section section-bg" id="registration">
+    <div class="container report-grid">
+      <div class="report-info reveal">
+        <h2>Registration</h2>
+        <p>Create your RealCheck AI account to receive scam alerts, save analysis history, and get trusted internship and job updates.</p>
+        
+        <div class="report-stats">
+          <div class="stat-box">
+            <h4>120K+</h4>
+            <p>Users Protected</p>
+          </div>
+          <div class="stat-box">
+            <h4>98%</h4>
+            <p>Detection Accuracy</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="report-form-card reveal">
+        <form id="reportForm">
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Full Name</label>
+              <input type="text" required placeholder="Enter your full name">
+            </div>
+            <div class="form-group">
+              <label>Email Address</label>
+              <input type="email" required placeholder="you@example.com">
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label>Role</label>
+            <select required>
+              <option value="" disabled selected>Select your role</option>
+              <option>Student</option>
+              <option>Fresher / Entry-Level Professional</option>
+              <option>Working Professional</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" required placeholder="Create a strong password">
+          </div>
+
+          <div class="form-group">
+            <label>Career Interests</label>
+            <textarea required rows="4" placeholder="Tell us the job roles and industries you are interested in..."></textarea>
+          </div>
+
+          <button type="submit" class="btn btn-primary w-100">Create Account</button>
+        </form>
+        <div id="reportSuccess" class="success-msg" style="display:none;">
+          <i class="fa-solid fa-circle-check"></i> Registration successful. Welcome to RealCheck AI.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== FOOTER ========== -->
+  <footer class="footer">
+    <div class="container footer-grid">
+      <div class="footer-brand">
+        <div class="logo-box">
+          <i class="fa-solid fa-shield-halved"></i>
+        </div>
+        RealCheck <span>AI</span>
+        <p class="footer-desc">Empowering job seekers with AI-driven fraud detection to find safe, verified career opportunities.</p>
+        <div class="social-links">
+          <a href="#"><i class="fa-brands fa-twitter"></i></a>
+          <a href="#"><i class="fa-brands fa-linkedin"></i></a>
+          <a href="#"><i class="fa-brands fa-github"></i></a>
+        </div>
+      </div>
+
+      <div class="footer-links">
+        <h4>Company</h4>
+        <ul>
+          <li><a href="#">About RealCheck AI</a></li>
+          <li><a href="#">Contact</a></li>
+          <li><a href="#">Careers</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-links">
+        <h4>Resources</h4>
+        <ul>
+          <li><a href="#">Scam Awareness Guide</a></li>
+          <li><a href="#">Job Search Tips</a></li>
+          <li><a href="#">Internship Safety Tips</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-links">
+        <h4>Legal</h4>
+        <ul>
+          <li><a href="#">Privacy Policy</a></li>
+          <li><a href="#">Terms of Service</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <div class="container">
+        <p>RealCheck AI helps students and job seekers avoid scams and find safer internship and job opportunities online.</p>
+        <p>&copy; 2026 RealCheck AI. All rights reserved.</p>
+      </div>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+
+  <!-- ========== REGISTRATION POPUP ========== -->
+  <div class="reg-popup-overlay" id="regPopupOverlay">
+    <div class="reg-popup-card">
+      <div class="reg-popup-left">
+        <img src="https://img.freepik.com/free-vector/cyber-security-concept_23-2148533314.jpg?w=1060&t=st=1697207604~exp=1697208204~hmac=50e41ba9258d4a974b7c62bb95be6fa2ab5ad463ddef5b33101fd902c34a1795" alt="AI Security Illustration">
+      </div>
+      <div class="reg-popup-right">
+        <button class="close-popup-btn" id="closePopupBtn"><i class="fa-solid fa-xmark"></i></button>
+        <h3>Create Account</h3>
+        <p>Join RealCheck AI today.</p>
+        <form id="regPopupForm">
+          <input type="text" placeholder="Full Name" required class="popup-input">
+          <input type="email" placeholder="Email" required class="popup-input">
+          <input type="password" placeholder="Password" required class="popup-input">
+          <input type="password" placeholder="Confirm Password" required class="popup-input">
+          <button type="submit" class="btn btn-primary w-100">Create Account</button>
+        </form>
+        <p class="login-link">Already have an account? <a href="#">Login</a></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== SUCCESS TOAST ========== -->
+  <div class="toast-notification" id="toastNotification">
+    <i class="fa-solid fa-circle-check"></i> Registration successful. Welcome to RealCheck AI.
+  </div>
+
+</body>
+</html>

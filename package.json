@@ -1,0 +1,12 @@
+{
+  "name": "realcheck-ai",
+  "private": true,
+  "scripts": {
+    "start": "npm --prefix realcheck-backend start",
+    "start:backend": "npm --prefix realcheck-backend start"
+  },
+  "dependencies": {
+    "axios": "^1.13.6",
+    "openai": "^6.27.0"
+  }
+}
