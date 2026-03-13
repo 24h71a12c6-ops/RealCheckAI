@@ -45,6 +45,7 @@ const strongFraudPaymentTerms = /\b(registration fee|training fee|security depos
 const urgencyPatterns = [
   /urgent(ly)?\s+(hiring|joining|response)/i,
   /(apply|pay)\s*(now|today|immediately)/i,
+  /immediate\s*joining|join\s*immediately/i,
   /last\s*(date|chance|few\s*hours)/i,
   /(limited|few)\s*seats/i,
   /offer\s*(expires|ends|valid)\s*(in|today|tomorrow)/i,
@@ -93,6 +94,24 @@ function companySlugFromEmail(email) {
   const domain = normalizeText(email).split("@")[1] || "";
   if (!domain || freeEmailDomains.includes(domain)) return null;
   return domain.split(".")[0]; // "techcorp.com" → "techcorp"
+}
+
+function companySlugFromWebsite(website) {
+  const domain = extractDomain(website);
+  if (!domain) return null;
+  const root = domain.split(".")[0] || "";
+  return root.toLowerCase() || null;
+}
+
+function companySlugFromName(companyName) {
+  const name = String(companyName || "").trim().toLowerCase();
+  if (!name) return null;
+  return name
+    .replace(/\b(private|pvt|limited|ltd|inc|llc|corp|corporation|solutions|technologies|technology)\b/g, "")
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "") || null;
 }
 
 // ─── External Checks ──────────────────────────────────────────────────────────
@@ -183,13 +202,17 @@ function fakeAIDetection(text) {
 
 // ─── Main Detection Function ──────────────────────────────────────────────────
 
-async function detectScam({ message, email, website }) {
+async function detectScam({ message, email, website, companyName }) {
   const normMsg  = normalizeText(message);
   const normEmail = normalizeText(email);
   const normSite  = String(website || "").trim();
 
   let riskScore = 0;
   const reasons = [];
+  let linkedInStatus = "not_checked";
+  let domainStatus = "not_checked";
+  let domainAgeDays = null;
+  let domainCreatedDate = null;
 
   // 1. Payment keyword + regex pattern (+40)
   const matchedKw = paymentKeywords.filter((k) => normMsg.includes(k));
@@ -236,6 +259,26 @@ async function detectScam({ message, email, website }) {
     reasons.push(`Sophisticated scam pattern detected: ${detected}`);
   }
 
+  // 3c. Offer credibility red flags (no interview + immediate joining + bank/payroll request)
+  const hasNoInterview = /no\s*interview|without\s*interview|interview\s*not\s*required/i.test(message || "");
+  const hasImmediateJoining = /immediate\s*joining|join\s*immediately/i.test(message || "");
+  const hasBankForPayroll = /(bank\s*(details|account|information|account\s*number)|account\s*number)[\s\S]{0,70}(stipend|salary|payroll|processing)/i.test(message || "");
+  const hasRemoteHighPaySignal = /(remote|work\s*from\s*home)[\s\S]{0,80}(₹|inr)\s*\d[\d,]*/i.test(message || "") ||
+                                 /(₹|inr)\s*\d[\d,]*[\s\S]{0,80}(remote|work\s*from\s*home)/i.test(message || "");
+
+  const hasStrongCredibilityScamCombo =
+    (hasNoInterview && hasImmediateJoining) ||
+    (hasBankForPayroll && hasNoInterview) ||
+    (hasBankForPayroll && hasImmediateJoining);
+
+  if (hasStrongCredibilityScamCombo) {
+    riskScore += 30;
+    reasons.push("Offer credibility red flags: no interview / immediate joining / bank details request");
+  } else if (hasNoInterview || hasImmediateJoining || hasBankForPayroll || hasRemoteHighPaySignal) {
+    riskScore += 15;
+    reasons.push("Unusual offer pattern detected (verify interview process and payroll details)");
+  }
+
   // 4. Free / personal email domain (+25)
   const emailDomain = normEmail.includes("@") ? normEmail.split("@")[1] : "";
   if (emailDomain && freeEmailDomains.includes(emailDomain)) {
@@ -245,12 +288,20 @@ async function detectScam({ message, email, website }) {
 
   // 5–7: Run external I/O checks concurrently to keep latency low
   const domain = normSite ? extractDomain(normSite) : null;
-  const slug   = companySlugFromEmail(email);
+  const linkedInCandidates = Array.from(
+    new Set([
+      companySlugFromEmail(email),
+      companySlugFromWebsite(normSite),
+      companySlugFromName(companyName)
+    ].filter(Boolean))
+  );
 
-  const [websiteExists, domainCreated, linkedInFound] = await Promise.all([
+  const [websiteExists, domainCreated, linkedInChecks] = await Promise.all([
     normSite ? checkWebsiteExists(normSite)            : Promise.resolve(null),
     domain   ? getDomainCreationDate(domain)            : Promise.resolve(null),
-    slug     ? checkLinkedInCompany(slug)               : Promise.resolve(null)
+    linkedInCandidates.length > 0
+      ? Promise.all(linkedInCandidates.map((candidate) => checkLinkedInCompany(candidate)))
+      : Promise.resolve([])
   ]);
 
   // 5. Website existence (+35)
@@ -264,13 +315,22 @@ async function detectScam({ message, email, website }) {
 
   // 6. Domain age via WHOIS (+40)
   if (domain) {
+    domainCreatedDate = domainCreated || null;
     const ageDays = domainAgeInDays(domainCreated);
+    domainAgeDays = ageDays !== null ? Math.round(ageDays) : null;
+
     if (ageDays !== null && ageDays < 30) {
+      domainStatus = "new";
       riskScore += 40;
       reasons.push(`Domain is very new — only ${Math.round(ageDays)} day(s) old`);
     } else if (ageDays === null) {
+      domainStatus = "unknown";
       reasons.push("Domain age could not be verified (WHOIS unavailable)");
+    } else {
+      domainStatus = "established";
     }
+  } else {
+    domainStatus = "skipped";
   }
 
   // 7. AI-generated message detection (simulated, pattern-based) (+20)
@@ -281,19 +341,38 @@ async function detectScam({ message, email, website }) {
   }
 
   // 8. LinkedIn company verification (+35)
-  if (slug !== null) {
-    if (linkedInFound === false) {
+  if (linkedInCandidates.length > 0) {
+    const hasLinkedInPage = linkedInChecks.some((v) => v === true);
+    const allNotFound = linkedInChecks.length > 0 && linkedInChecks.every((v) => v === false);
+    const hasUnknown = linkedInChecks.some((v) => v === null);
+
+    if (hasLinkedInPage) {
+      linkedInStatus = "verified";
+    } else if (!hasLinkedInPage && allNotFound) {
+      linkedInStatus = "not_found";
       riskScore += 35;
-      reasons.push(`No LinkedIn company page found for "${slug}"`);
-    } else if (linkedInFound === null) {
+      reasons.push(`No LinkedIn company page found for "${linkedInCandidates[0]}"`);
+    } else if (!hasLinkedInPage && hasUnknown) {
+      linkedInStatus = "unknown";
       reasons.push("LinkedIn verification skipped (network timeout)");
     }
+  } else {
+    linkedInStatus = "skipped";
   }
 
   riskScore = Math.min(riskScore, 100);
   const risk = riskScore > 70 ? "High" : riskScore > 30 ? "Medium" : "Low";
 
-  return { risk, score: riskScore, reasons };
+  return {
+    risk,
+    score: riskScore,
+    reasons,
+    linkedin_status: linkedInStatus,
+    domain_status: domainStatus,
+    domain_age_days: domainAgeDays,
+    domain_created_date: domainCreatedDate,
+    domain_checked: domain || null
+  };
 }
 
 module.exports = { detectScam };

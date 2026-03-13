@@ -64,9 +64,10 @@ async function saveAnalysisToFirestore(payload, result) {
 
         await firestoreDb.collection('analyses').add({
             uid,
-            jobMessage: payload.message || '',
-            recruiterEmail: payload.email || '',
-            companyWebsite: payload.website || '',
+            rawText: payload.rawText || '',
+            jobMessage: payload.rawText || payload.message || '',
+            recruiterEmail: result.recruiter_email || payload.email || '',
+            companyWebsite: result.company_website || payload.website || '',
             risk: result.risk || 'Low',
             score: Number.isFinite(result.score) ? result.score : 0,
             reasons: Array.isArray(result.reasons) ? result.reasons : [],
@@ -276,12 +277,10 @@ document.addEventListener('DOMContentLoaded', () => {
         scamAnalyzerForm.addEventListener('submit', async (e) => {
             e.preventDefault();
 
-            const message = document.getElementById('jobMessage').value.trim();
-            const email = document.getElementById('recruiterEmail').value.trim();
-            const website = document.getElementById('companyWebsite').value.trim();
+            const rawText = document.getElementById('rawJobText').value.trim();
 
-            if (!message && !email && !website) {
-                alert('Please paste an internship/job message, recruiter email, or website.');
+            if (!rawText) {
+                alert('Please paste job details in the input box.');
                 return;
             }
 
@@ -291,9 +290,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             try {
                 const payload = {
-                    message,
-                    email,
-                    website
+                    rawText
                 };
 
                 const response = await fetch('/api/analyze-job', {
