@@ -19,7 +19,9 @@
   <!-- ========== SPLASH SCREEN ========== -->
   <div class="splash-screen" id="splashScreen">
     <div class="splash-content">
-      <img src="assets/logo.png" alt="RealCheck AI Logo" class="splash-logo" />
+      <div class="splash-brand-mark" aria-label="RealCheck AI Brand Mark">
+        <i class="fa-solid fa-shield-halved"></i>
+      </div>
       <h2>RealCheck <span>AI</span></h2>
       <p>Verify Job Offers Before You Apply</p>
     </div>
@@ -37,16 +39,27 @@
 
       <div class="nav-links" id="navLinks">
         <a href="#hero" class="active">Home</a>
-        <a href="#scam-detection-tips">Scam Red Flags</a>
-        <a href="#scam-detection">Scam Detection</a>
+        <a href="#instant-analyzer">Scam Detection</a>
+        <a href="#scam-detection">Scam Red Flags</a>
         <a href="#real-opportunities">Real Internships / Jobs</a>
         <a href="#scam-db">Scam Database</a>
         <a href="#registration">Registration</a>
       </div>
 
       <div class="nav-actions">
-        <button class="btn btn-ghost">Login</button>
-        <button class="btn btn-primary">Register</button>
+        <button class="theme-toggle-btn" id="themeToggleBtn" aria-label="Toggle light/dark mode">
+          <i class="fa-solid fa-sun" id="themeIcon"></i>
+        </button>
+        <div class="profile-menu" id="profileMenu">
+          <button class="profile-icon-btn" id="profileIconBtn" aria-label="Profile">
+            <div class="profile-avatar" id="profileAvatar">
+              <i class="fa-solid fa-user"></i>
+            </div>
+          </button>
+          <div class="profile-dropdown" id="profileDropdown">
+            <!-- populated by JS -->
+          </div>
+        </div>
         <button class="mobile-menu-btn" id="mobileMenuBtn">
           <i class="fa-solid fa-bars"></i>
         </button>
@@ -55,7 +68,7 @@
   </nav>
 
   <!-- ========== HERO SECTION ========== -->
-  <section class="hero" id="hero">
+  <section class="hero reveal-section" id="hero">
     <div class="container hero-grid">
       <div class="hero-content reveal">
         <div class="hero-badge">
@@ -67,14 +80,12 @@
         <p>Professional AI-powered fraud analysis for students and job seekers. Detect scam signals instantly.</p>
         <button class="btn btn-primary btn-lg">Start Analysis</button>
       </div>
-      <div class="hero-image reveal" style="transition-delay: 0.2s;">
-        <img src="https://img.freepik.com/free-vector/cyber-security-concept_23-2148533314.jpg?w=1060&t=st=1697207604~exp=1697208204~hmac=50e41ba9258d4a974b7c62bb95be6fa2ab5ad463ddef5b33101fd902c34a1795" alt="Cybersecurity AI">
-      </div>
+
     </div>
   </section>
 
   <!-- ========== INSTANT SCAM DETECTION ANALYZER ========== -->
-  <section class="analyzer-section" id="instant-analyzer">
+  <section class="analyzer-section reveal-section" id="instant-analyzer">
     <div id="scam-analyzer" style="font-family: 'Segoe UI', sans-serif; padding: 50px 0; background: #ffffff;">
       <div style="max-width: 900px; margin: auto; padding: 40px; border: 1.5px solid #0056f7; border-radius: 25px; box-shadow: 0 10px 30px rgba(0, 86, 247, 0.05);">
 
@@ -104,7 +115,7 @@
   </section>
 
   <!-- ========== REAL JOBS & INTERNSHIPS (live) ========== -->
-  <section class="jobs-section jobs-page" id="real-opportunities">
+  <section class="jobs-section jobs-page reveal-section" id="real-opportunities">
     <div class="container">
       <div class="section-header text-center reveal">
         <span class="badge-primary">🌐 Live Opportunities</span>
@@ -137,7 +148,7 @@
   </section>
 
   <!-- ========== SCAM DETECTION ========== -->
-  <section class="trust-section section-bg" id="scam-detection">
+  <section class="trust-section section-bg reveal-section" id="scam-detection">
     <div class="container">
       <div class="section-header text-center reveal">
         <h2>Scam Detection Intelligence</h2>
@@ -170,7 +181,7 @@
   </section>
 
   <!-- ========== SKILL GAP ANALYZER ========== -->
-  <section class="skill-gap-section section-bg" id="skill-gap-analyzer">
+  <section class="skill-gap-section section-bg reveal-section" id="skill-gap-analyzer">
     <div class="container">
       <div class="section-header text-center reveal">
         <span class="badge-primary">🎯 Career Planning</span>
@@ -187,11 +198,25 @@
 
           <div class="form-group">
             <label for="target-role">Target Role</label>
-            <select id="target-role" class="skill-role-select">
-              <option value="Web Developer">Web Developer</option>
-              <option value="Data Analyst">Data Analyst</option>
-              <option value="AI/ML Engineer">AI/ML Engineer</option>
-            </select>
+            <input type="text" id="target-role" class="role-search-input" list="target-role-options" placeholder="Search or type your target role...">
+            <datalist id="target-role-options">
+              <option value="Web Developer"></option>
+              <option value="Frontend Developer"></option>
+              <option value="Backend Developer"></option>
+              <option value="Full Stack Developer"></option>
+              <option value="Data Analyst"></option>
+              <option value="Data Scientist"></option>
+              <option value="AI/ML Engineer"></option>
+              <option value="DevOps Engineer"></option>
+              <option value="Cloud Engineer"></option>
+              <option value="Cybersecurity Analyst"></option>
+              <option value="UI/UX Designer"></option>
+              <option value="Mobile Developer"></option>
+              <option value="Product Manager"></option>
+              <option value="Business Analyst"></option>
+              <option value="Digital Marketer"></option>
+              <option value="Content Writer"></option>
+            </datalist>
           </div>
 
           <button type="button" onclick="analyzeGap()" class="btn btn-primary btn-lg">
@@ -216,7 +241,7 @@
   </section>
 
   <!-- ========== SCAM DATABASE ========== -->
-  <section class="database-section" id="scam-db">
+  <section class="database-section reveal-section" id="scam-db">
     <div class="container">
       <div class="section-header text-center reveal">
         <span class="badge-danger">Fraud Watch</span>
@@ -241,27 +266,11 @@
               <th>Date</th>
             </tr>
           </thead>
-          <tbody>
-            <tr>
-              <td><strong>TechHire Solutions (Fake)</strong></td>
-              <td>Asking for ₹2000 registration fee before interview.</td>
-              <td><span class="db-reports">124</span></td>
-              <td><span class="status-badge red">High Risk</span></td>
-              <td>Oct 12, 2026</td>
-            </tr>
-            <tr>
-              <td><strong>GlobalData Corp</strong></td>
-              <td>Sending fake offer letters via Gmail address.</td>
-              <td><span class="db-reports">89</span></td>
-              <td><span class="status-badge red">High Risk</span></td>
-              <td>Oct 10, 2026</td>
-            </tr>
-            <tr>
-              <td><strong>Unknown Recruiter (LinkedIn)</strong></td>
-              <td>Phishing link for "assessment portal".</td>
-              <td><span class="db-reports">45</span></td>
-              <td><span class="status-badge yellow">Suspicious</span></td>
-              <td>Oct 08, 2026</td>
+          <tbody id="scamDbBody">
+            <tr id="scamDbLoading">
+              <td colspan="5" style="text-align:center; padding: 32px; color: var(--text-muted);">
+                <i class="fa-solid fa-circle-notch fa-spin"></i> Loading reports...
+              </td>
             </tr>
           </tbody>
         </table>
@@ -270,7 +279,7 @@
   </section>
 
   <!-- ========== REGISTRATION SECTION ========== -->
-  <section class="report-section section-bg" id="registration">
+  <section class="report-section section-bg reveal-section" id="registration">
     <div class="container report-grid">
       <div class="report-info reveal">
         <h2>Registration</h2>

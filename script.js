@@ -208,6 +208,90 @@ async function saveAnalysisToFirestore(payload, result) {
     }
 }
 
+// ========== SCAM DATABASE ==========
+let allScamReports = [];
+
+async function loadScamDatabase() {
+    const tbody = document.getElementById('scamDbBody');
+    if (!tbody) return;
+
+    if (!firebaseReady || !firestoreDb) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-muted)">
+            <i class="fa-solid fa-circle-exclamation"></i> Database unavailable — backend not connected.
+        </td></tr>`;
+        return;
+    }
+
+    try {
+        const snap = await firestoreDb.collection('analyses')
+            .where('risk', 'in', ['High', 'Suspicious', 'Medium'])
+            .orderBy('createdAt', 'desc')
+            .limit(50)
+            .get();
+
+        allScamReports = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        renderScamTable(allScamReports);
+    } catch (err) {
+        console.warn('Scam DB load error:', err.message);
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-muted)">
+            <i class="fa-solid fa-database"></i> No scam reports found yet. Reports appear here after users run the scam detector.
+        </td></tr>`;
+    }
+}
+
+function renderScamTable(reports) {
+    const tbody = document.getElementById('scamDbBody');
+    if (!tbody) return;
+
+    if (!reports.length) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-muted)">
+            <i class="fa-solid fa-shield-halved"></i> No scam reports found. Run the Scam Detector to generate reports.
+        </td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = reports.map(r => {
+        const company = r.companyWebsite || r.recruiterEmail || 'Unknown Source';
+        const desc = Array.isArray(r.reasons) && r.reasons.length
+            ? r.reasons[0]
+            : (r.rawText ? r.rawText.substring(0, 80) + '...' : 'Flagged by AI analysis.');
+        const date = r.createdAt?.toDate
+            ? r.createdAt.toDate().toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })
+            : '—';
+        const riskClass = r.risk === 'High' ? 'red' : r.risk === 'Medium' ? 'yellow' : 'yellow';
+        const score = Number.isFinite(r.score) ? r.score : '?';
+        return `<tr>
+            <td><strong>${escapeHtmlNav(company)}</strong></td>
+            <td>${escapeHtmlNav(desc)}</td>
+            <td><span class="db-reports">${score}</span></td>
+            <td><span class="status-badge ${riskClass}">${escapeHtmlNav(r.risk)}</span></td>
+            <td>${date}</td>
+        </tr>`;
+    }).join('');
+}
+
+// Search
+const dbSearchInput = document.getElementById('dbSearch');
+if (dbSearchInput) {
+    dbSearchInput.addEventListener('input', () => {
+        const q = dbSearchInput.value.toLowerCase().trim();
+        if (!q) { renderScamTable(allScamReports); return; }
+        const filtered = allScamReports.filter(r =>
+            (r.companyWebsite || '').toLowerCase().includes(q) ||
+            (r.recruiterEmail || '').toLowerCase().includes(q) ||
+            (r.rawText || '').toLowerCase().includes(q) ||
+            (r.reasons || []).join(' ').toLowerCase().includes(q)
+        );
+        renderScamTable(filtered);
+    });
+}
+const dbSearchBtn = document.querySelector('#scam-db .btn.btn-primary');
+if (dbSearchBtn) {
+    dbSearchBtn.addEventListener('click', () => {
+        dbSearchInput && dbSearchInput.dispatchEvent(new Event('input'));
+    });
+}
+
 const observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
         if (entry.isIntersecting) {
@@ -220,6 +304,20 @@ const observer = new IntersectionObserver((entries) => {
 document.querySelectorAll('.reveal').forEach(el => {
     observer.observe(el);
 });
+
+// Fallback for browsers that don't support animation-timeline: view()
+const supportsScrollTimeline = CSS.supports('animation-timeline', 'view()');
+if (!supportsScrollTimeline) {
+    const sectionObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('in-view');
+                sectionObserver.unobserve(entry.target);
+            }
+        });
+    }, { threshold: 0.12 });
+    document.querySelectorAll('.reveal-section').forEach(el => sectionObserver.observe(el));
+}
 
 // ========== HERO AI ANALYZER ==========
 const analyzeBtn = document.getElementById('analyzeBtn');
@@ -266,8 +364,14 @@ if (reportForm) {
     reportForm.addEventListener('submit', function(e) {
         e.preventDefault();
         const btn = this.querySelector('button[type="submit"]');
-        const originalText = btn.innerText;
         
+        // Save user details for profile dropdown
+        const inputs = this.querySelectorAll('input, select, textarea');
+        const fullName = inputs[0]?.value?.trim() || '';
+        const email = inputs[1]?.value?.trim() || '';
+        const role = inputs[2]?.value?.trim() || '';
+        localStorage.setItem('realcheck_user_v2', JSON.stringify({ name: fullName, email, role }));
+
         btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Submitting...';
         btn.disabled = true;
         
@@ -277,26 +381,183 @@ if (reportForm) {
             if (reportSuccess) {
                 reportSuccess.style.display = 'block';
             }
+            updateProfileNav();
         }, 1000);
     });
 }
 
+// ========== PROFILE NAV ==========
+function getStoredUser() {
+    try {
+        const raw = localStorage.getItem('realcheck_user_v2');
+        if (!raw) return null;
+        // legacy: was just 'registered' string
+        if (raw === 'registered') return { name: 'User', email: '', role: '' };
+        return JSON.parse(raw);
+    } catch (_) { return null; }
+}
+
+function updateProfileNav() {
+    const dropdown = document.getElementById('profileDropdown');
+    const avatar = document.getElementById('profileAvatar');
+    if (!dropdown || !avatar) return;
+    const user = getStoredUser();
+    if (user) {
+        const initials = user.name
+            ? user.name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase()
+            : '?';
+        avatar.textContent = initials;
+        dropdown.innerHTML = `
+            <div class="profile-dropdown-header">
+                <div class="profile-dropdown-avatar">${initials}</div>
+                <div class="profile-dropdown-info">
+                    <div class="profile-dropdown-name">${escapeHtmlNav(user.name || 'User')}</div>
+                    <div class="profile-dropdown-email">${escapeHtmlNav(user.email || '')}</div>
+                    ${user.role ? `<div class="profile-dropdown-role">${escapeHtmlNav(user.role)}</div>` : ''}
+                </div>
+            </div>
+            <div class="profile-dropdown-actions">
+                <div class="profile-divider"></div>
+                <button class="btn-logout" onclick="logoutUser()"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>
+            </div>`;
+    } else {
+        avatar.innerHTML = '<i class="fa-solid fa-user"></i>';
+        dropdown.innerHTML = `
+            <div class="profile-dropdown-guest">
+                <p>Sign in to access your profile and saved analyses.</p>
+                <a href="#registration" class="btn btn-primary w-100" onclick="document.getElementById('profileDropdown').classList.remove('open')">Register / Sign In</a>
+            </div>`;
+    }
+}
+
+function escapeHtmlNav(v) {
+    return String(v || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+window.logoutUser = function() {
+    localStorage.removeItem('realcheck_user_v2');
+    if (firebaseAuth && firebaseAuth.currentUser && !firebaseAuth.currentUser.isAnonymous) {
+        firebaseAuth.signOut().catch(() => {});
+    }
+    document.getElementById('profileDropdown').classList.remove('open');
+    updateProfileNav();
+};
+
+// ========== THEME TOGGLE ==========
+(function initTheme() {
+    const saved = localStorage.getItem('realcheck_theme');
+    if (saved === 'light') document.body.classList.add('light');
+    updateThemeIcon();
+})();
+
+function updateThemeIcon() {
+    const icon = document.getElementById('themeIcon');
+    if (!icon) return;
+    if (document.body.classList.contains('light')) {
+        icon.className = 'fa-solid fa-moon';
+    } else {
+        icon.className = 'fa-solid fa-sun';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const themeBtn = document.getElementById('themeToggleBtn');
+    if (themeBtn) {
+        themeBtn.addEventListener('click', () => {
+            document.body.classList.toggle('light');
+            localStorage.setItem('realcheck_theme', document.body.classList.contains('light') ? 'light' : 'dark');
+            updateThemeIcon();
+        });
+    }
+});
+
 // ========== SKILL ROADMAP DATA ==========
 const skillRoadmap = {
     "Web Developer": [
-        { skill: "HTML/CSS",         title: "HTML & CSS Full Course",      videoId: "mU6anWqZJcc", channel: "Apna College" },
-        { skill: "JavaScript",       title: "Modern JS Tutorial",           videoId: "jS4aFq5-91M", channel: "SuperSimpleDev" },
-        { skill: "React",            title: "React JS Crash Course",        videoId: "bMknfKXIFA8", channel: "Traversy Media" }
+        { skill: "HTML/CSS",         title: "HTML & CSS Full Course",       videoId: "mU6anWqZJcc", channel: "Apna College" },
+        { skill: "JavaScript",       title: "Modern JS Tutorial",            videoId: "jS4aFq5-91M", channel: "SuperSimpleDev" },
+        { skill: "React",            title: "React JS Crash Course",         videoId: "bMknfKXIFA8", channel: "Traversy Media" }
+    ],
+    "Frontend Developer": [
+        { skill: "HTML/CSS",         title: "HTML & CSS Full Course",       videoId: "mU6anWqZJcc", channel: "Apna College" },
+        { skill: "JavaScript",       title: "JavaScript Full Course",        videoId: "jS4aFq5-91M", channel: "SuperSimpleDev" },
+        { skill: "React",            title: "React JS Crash Course",         videoId: "bMknfKXIFA8", channel: "Traversy Media" },
+        { skill: "Tailwind CSS",     title: "Tailwind CSS Tutorial",         videoId: "dFgzHOX84xQ", channel: "Traversy Media" }
+    ],
+    "Backend Developer": [
+        { skill: "Node.js",          title: "Node.js Full Course",           videoId: "f2EqECiTBL8", channel: "freeCodeCamp" },
+        { skill: "Express.js",       title: "Express JS Crash Course",       videoId: "L72fhGm1tfE", channel: "Traversy Media" },
+        { skill: "SQL",              title: "SQL Full Course",                videoId: "HXV3zePRqGY", channel: "freeCodeCamp" },
+        { skill: "MongoDB",          title: "MongoDB Crash Course",          videoId: "-56x56UppqQ", channel: "Traversy Media" }
+    ],
+    "Full Stack Developer": [
+        { skill: "HTML/CSS",         title: "HTML & CSS Full Course",       videoId: "mU6anWqZJcc", channel: "Apna College" },
+        { skill: "JavaScript",       title: "Modern JS Tutorial",            videoId: "jS4aFq5-91M", channel: "SuperSimpleDev" },
+        { skill: "Node.js",          title: "Node.js Full Course",           videoId: "f2EqECiTBL8", channel: "freeCodeCamp" },
+        { skill: "React",            title: "React JS Crash Course",         videoId: "bMknfKXIFA8", channel: "Traversy Media" }
     ],
     "Data Analyst": [
-        { skill: "Excel",            title: "Advanced Excel Tutorial",      videoId: "Vl0hux8aHY0", channel: "Leila Gharani" },
-        { skill: "SQL",              title: "SQL Full Course",               videoId: "HXV3zePRqGY", channel: "freeCodeCamp" },
-        { skill: "Python",           title: "Python for Data Science",      videoId: "rfscVS0vtbw", channel: "freeCodeCamp" }
+        { skill: "Excel",            title: "Advanced Excel Tutorial",       videoId: "Vl0hux8aHY0", channel: "Leila Gharani" },
+        { skill: "SQL",              title: "SQL Full Course",                videoId: "HXV3zePRqGY", channel: "freeCodeCamp" },
+        { skill: "Python",           title: "Python for Data Science",       videoId: "rfscVS0vtbw", channel: "freeCodeCamp" }
+    ],
+    "Data Scientist": [
+        { skill: "Python",           title: "Python for Data Science",       videoId: "rfscVS0vtbw", channel: "freeCodeCamp" },
+        { skill: "Pandas",           title: "Pandas Full Course",            videoId: "vmEHCJofslg", channel: "Keith Galli" },
+        { skill: "Machine Learning", title: "ML with Python",                videoId: "7eh4d6sabA0", channel: "freeCodeCamp" },
+        { skill: "Statistics",       title: "Statistics for Data Science",   videoId: "xxpc-HPKN28", channel: "freeCodeCamp" }
     ],
     "AI/ML Engineer": [
-        { skill: "Python",           title: "Python for AI",                videoId: "NWONeJKn6kc", channel: "CodeWithHarry" },
-        { skill: "Maths",            title: "Linear Algebra for ML",        videoId: "u0TIDZ-I690", channel: "3Blue1Brown" },
-        { skill: "Neural Networks",  title: "Deep Learning Specialization", videoId: "aircAruvnKk", channel: "3Blue1Brown" }
+        { skill: "Python",           title: "Python for AI",                 videoId: "NWONeJKn6kc", channel: "CodeWithHarry" },
+        { skill: "Maths",            title: "Linear Algebra for ML",         videoId: "u0TIDZ-I690", channel: "3Blue1Brown" },
+        { skill: "Neural Networks",  title: "Deep Learning Specialization",  videoId: "aircAruvnKk", channel: "3Blue1Brown" }
+    ],
+    "DevOps Engineer": [
+        { skill: "Linux",            title: "Linux Full Course",             videoId: "wBp0Rb-ZJak", channel: "freeCodeCamp" },
+        { skill: "Docker",           title: "Docker Crash Course",           videoId: "pg19Z8LL06w", channel: "TechWorld with Nana" },
+        { skill: "Kubernetes",       title: "Kubernetes Tutorial",           videoId: "X48VuDVv0do", channel: "TechWorld with Nana" },
+        { skill: "CI/CD",            title: "GitHub Actions Full Course",    videoId: "R8_veQiYBjI", channel: "TechWorld with Nana" }
+    ],
+    "Cloud Engineer": [
+        { skill: "AWS",              title: "AWS Full Course",               videoId: "k1RI5locZE4", channel: "freeCodeCamp" },
+        { skill: "Azure",            title: "Azure Fundamentals",            videoId: "NKEFWyqJ5XA", channel: "freeCodeCamp" },
+        { skill: "Networking",       title: "Computer Networking Full Course",videoId: "IPvYjXCsTg8", channel: "freeCodeCamp" }
+    ],
+    "Cybersecurity Analyst": [
+        { skill: "Networking",       title: "Computer Networking Full Course",videoId: "IPvYjXCsTg8", channel: "freeCodeCamp" },
+        { skill: "Linux",            title: "Linux Full Course",             videoId: "wBp0Rb-ZJak", channel: "freeCodeCamp" },
+        { skill: "Ethical Hacking",  title: "Ethical Hacking Full Course",   videoId: "3Kq1MIfTWCE", channel: "freeCodeCamp" },
+        { skill: "OWASP",            title: "Web App Penetration Testing",   videoId: "2_lswM1S264", channel: "freeCodeCamp" }
+    ],
+    "UI/UX Designer": [
+        { skill: "Figma",            title: "Figma Full Course",             videoId: "FTFaQWZBqQ8", channel: "freeCodeCamp" },
+        { skill: "Design Principles",title: "UI Design Fundamentals",        videoId: "tRpoI6vkwLo", channel: "Gary Simon" },
+        { skill: "Prototyping",      title: "Prototyping in Figma",          videoId: "Ie-CKJX0vyY", channel: "DesignCourse" }
+    ],
+    "Mobile Developer": [
+        { skill: "Java/Kotlin",      title: "Android Development Full Course",videoId: "fis26HvvDII", channel: "freeCodeCamp" },
+        { skill: "React Native",     title: "React Native Crash Course",     videoId: "0-S5a0eXPoc", channel: "Traversy Media" },
+        { skill: "Flutter",          title: "Flutter Full Course",           videoId: "VPvVD8t02U8", channel: "freeCodeCamp" }
+    ],
+    "Product Manager": [
+        { skill: "Product Thinking", title: "Product Management Fundamentals",videoId: "yUOC-Y0f5ZQ", channel: "Google Career Certificates" },
+        { skill: "Agile/Scrum",      title: "Agile & Scrum Full Course",     videoId: "sFEbR6P0-to", channel: "freeCodeCamp" },
+        { skill: "Analytics",        title: "Google Analytics Full Course",  videoId: "9nl-bIPFCFM", channel: "Daragh Walsh" }
+    ],
+    "Business Analyst": [
+        { skill: "Excel",            title: "Advanced Excel Tutorial",       videoId: "Vl0hux8aHY0", channel: "Leila Gharani" },
+        { skill: "SQL",              title: "SQL Full Course",                videoId: "HXV3zePRqGY", channel: "freeCodeCamp" },
+        { skill: "Power BI",         title: "Power BI Full Course",          videoId: "AGrl-H87pRU", channel: "freeCodeCamp" }
+    ],
+    "Digital Marketer": [
+        { skill: "SEO",              title: "SEO Full Course",               videoId: "xsVTqzratPs", channel: "freeCodeCamp" },
+        { skill: "Social Media",     title: "Social Media Marketing",        videoId: "q2EPuKgEaX8", channel: "HubSpot" },
+        { skill: "Google Ads",       title: "Google Ads Full Course",        videoId: "lbzBEFgJxDs", channel: "freeCodeCamp" }
+    ],
+    "Content Writer": [
+        { skill: "Writing Skills",   title: "Professional Writing Course",   videoId: "vtIzMaLkCaM", channel: "freeCodeCamp" },
+        { skill: "SEO Writing",      title: "SEO Content Writing",           videoId: "qN6szkBbMYQ", channel: "Ahrefs" },
+        { skill: "Copywriting",      title: "Copywriting Full Course",       videoId: "N_aeXMvBKCU", channel: "Alex Cattoni" }
     ]
 };
 
@@ -336,13 +597,27 @@ function analyzeGap() {
     const gapForm    = document.querySelector('.skill-gap-form');
 
     const currentSkills = skillsEl ? skillsEl.value : '';
-    const targetRole    = roleEl  ? roleEl.value  : '';
+    const targetRole    = roleEl  ? roleEl.value.trim()  : '';
 
     if (!currentSkills.trim()) { alert('Please enter your current skills.'); return; }
+    if (!targetRole) { alert('Please enter your target role.'); return; }
     if (!resultsEl || !courseList) return;
 
     const skillsLower = currentSkills.toLowerCase();
-    const required    = skillRoadmap[targetRole] || [];
+    const roadmapKeys = Object.keys(skillRoadmap);
+    const exactKey = roadmapKeys.find((k) => k.toLowerCase() === targetRole.toLowerCase());
+    const fuzzyKey = roadmapKeys.find((k) =>
+        k.toLowerCase().includes(targetRole.toLowerCase()) ||
+        targetRole.toLowerCase().includes(k.toLowerCase())
+    );
+    const resolvedRoleKey = exactKey || fuzzyKey || null;
+
+    if (!resolvedRoleKey) {
+        alert('No roadmap found for this role yet. Please try a related role from suggestions.');
+        return;
+    }
+
+    const required    = skillRoadmap[resolvedRoleKey] || [];
     const missing     = required.filter(item => !skillsLower.includes(item.skill.toLowerCase()));
 
     displayCourses(missing, courseList);
@@ -361,9 +636,28 @@ document.addEventListener('DOMContentLoaded', () => {
     const closePopupBtn = document.getElementById('closePopupBtn');
     const ctaRegisterBtn = document.getElementById('ctaRegisterBtn');
     const regPopupForm = document.getElementById('regPopupForm');
-    const isRegistered = localStorage.getItem('realcheck_user_v2');
 
-    initFirebase();
+    initFirebase().then(() => {
+        loadScamDatabase();
+    }).catch(() => {
+        loadScamDatabase();
+    });
+
+    // Profile nav init
+    updateProfileNav();
+    const profileIconBtn = document.getElementById('profileIconBtn');
+    const profileDropdown = document.getElementById('profileDropdown');
+    if (profileIconBtn) {
+        profileIconBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            profileDropdown.classList.toggle('open');
+        });
+    }
+    document.addEventListener('click', (e) => {
+        if (profileDropdown && !profileDropdown.contains(e.target) && e.target !== profileIconBtn) {
+            profileDropdown.classList.remove('open');
+        }
+    });
 
     // 1. Splash Screen Fade Out after 3 seconds
     setTimeout(() => {
@@ -425,10 +719,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             // Save state
-            localStorage.setItem('realcheck_user_v2', 'registered');
+            // Save full user details for profile dropdown
+            localStorage.setItem('realcheck_user_v2', JSON.stringify({ name: fullName, email, role: '' }));
             
             // 1. Close Popup
             regPopupOverlay.classList.remove('show');
+            updateProfileNav();
             
 
         });
@@ -712,7 +1008,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         jobModalBody.innerHTML = `
             <div class="modal-header">
-                <h2 style="color: var(--navy);">${escapeHtml(job.position)}</h2>
+                <h2>${escapeHtml(job.position)}</h2>
                 <span class="company-tag">${escapeHtml(job.company)}</span>
             </div>
             <hr>
@@ -923,8 +1219,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (resultsEl)  resultsEl.style.display = 'none';
             if (courseList) courseList.innerHTML = '';
             if (skillsEl)   skillsEl.value = '';
-            if (roleEl)     roleEl.selectedIndex = 0;
-            if (skillGapForm) skillGapForm.style.display = 'grid';
+            if (roleEl)     roleEl.value = '';
+            if (skillGapForm) skillGapForm.style.display = 'flex';
             if (resultsEl) {
                 const card = resultsEl.closest('.skill-gap-card');
                 if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
