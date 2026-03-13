@@ -293,109 +293,168 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // ========== SCAM ANALYZER FORM HANDLER ==========
-    const scamAnalyzerForm = document.getElementById('scamAnalyzerForm');
-    const analysisResults = document.getElementById('analysisResults');
-    const analyzeSubmitBtn = document.getElementById('analyzeSubmitBtn');
-    const riskBadge = document.getElementById('riskBadge');
-    const riskScore = document.getElementById('riskScore');
-    const reasonsList = document.getElementById('reasonsList');
-    const closeResultsBtn = analysisResults ? analysisResults.querySelector('.btn-close') : null;
-    const analyzeAnotherBtn = analysisResults ? analysisResults.querySelector('.result-footer .btn') : null;
+    // ========== SCAM ANALYZER (DUAL-INPUT: TEXT + OCR) ==========
 
-    const resetAnalyzerView = () => {
-        if (analysisResults) {
-            analysisResults.style.display = 'none';
-        }
-        if (scamAnalyzerForm) {
-            scamAnalyzerForm.style.display = 'block';
-        }
+    let _analyzerMode = 'text-tab';
+
+    window.switchTab = function switchTab(tabId, event) {
+        _analyzerMode = tabId;
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        const tabEl = document.getElementById(tabId);
+        if (tabEl) tabEl.classList.add('active');
+        if (event && event.currentTarget) event.currentTarget.classList.add('active');
     };
 
-    if (closeResultsBtn) {
-        closeResultsBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            resetAnalyzerView();
-        });
-    }
+    window.previewImage = function previewImage(event) {
+        const file = event.target.files[0];
+        const preview = document.getElementById('img-preview');
+        if (!file || !preview) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            preview.src = e.target.result;
+            preview.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+    };
 
-    if (analyzeAnotherBtn) {
-        analyzeAnotherBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            if (scamAnalyzerForm) {
-                scamAnalyzerForm.reset();
+    function detectScamLogic(text) {
+        const resultDiv  = document.getElementById('detection-result');
+        const statusEl   = document.getElementById('result-status');
+        const detailsEl  = document.getElementById('risk-details');
+        const riskBadge  = document.getElementById('riskBadge');
+        const riskScore  = document.getElementById('riskScore');
+        const reasonsList= document.getElementById('reasonsList');
+
+        if (!resultDiv) return;
+
+        const scamWords = [
+            'registration fee', 'training fee', 'security deposit',
+            'whatsapp to', 'telegram to', 'batch code',
+            'pay to apply', 'joining fee', 'guaranteed salary',
+            'earn from home', 'no experience needed'
+        ];
+
+        const lowerText = String(text || '').toLowerCase();
+        let score = 0;
+        const found = [];
+
+        scamWords.forEach(word => {
+            if (lowerText.includes(word)) {
+                score = Math.min(score + 20, 100);
+                found.push(word);
             }
-            resetAnalyzerView();
         });
-    }
 
-    if (scamAnalyzerForm && analysisResults && analyzeSubmitBtn && riskBadge && riskScore && reasonsList) {
-        scamAnalyzerForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
+        if (riskBadge) {
+            riskBadge.className = score >= 60 ? 'risk-badge risk-high'
+                : score >= 30 ? 'risk-badge risk-medium'
+                : 'risk-badge risk-low';
+            riskBadge.textContent = score >= 60 ? 'High Risk'
+                : score >= 30 ? 'Medium Risk' : 'Low Risk';
+        }
+        if (riskScore) riskScore.textContent = String(score);
 
-            const rawText = document.getElementById('rawJobText').value.trim();
-
-            if (!rawText) {
-                alert('Please paste job details in the input box.');
-                return;
+        if (statusEl) {
+            if (score >= 40) {
+                statusEl.innerHTML = '⚠ High Risk: Suspicious Offer';
+                statusEl.style.color = '#f87171';
+            } else {
+                statusEl.innerHTML = '✅ Low Risk: Looks Legitimate';
+                statusEl.style.color = '#4ade80';
             }
+        }
 
-            const originalText = analyzeSubmitBtn.innerHTML;
-            analyzeSubmitBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Analyzing...';
-            analyzeSubmitBtn.disabled = true;
+        if (detailsEl) {
+            detailsEl.textContent = `Risk Score: ${score}% | Detected Signals: ${found.length > 0 ? found.join(', ') : 'None'}`;
+        }
 
-            try {
-                const payload = {
-                    rawText
-                };
-
-                const response = await fetch('/api/analyze-job', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(payload)
-                });
-
-                if (!response.ok) {
-                    throw new Error(`API error: ${response.status}`);
-                }
-
-                const result = await response.json();
-
-                await initFirebase();
-                await saveAnalysisToFirestore(payload, result);
-
-                riskBadge.className = `risk-badge risk-${String(result.risk || 'Low').toLowerCase()}`;
-                riskBadge.textContent = `${String(result.risk || 'Low')} Risk`;
-                riskScore.textContent = Number.isFinite(result.score) ? String(result.score) : '0';
-
-                reasonsList.innerHTML = '';
-                const reasons = Array.isArray(result.reasons) ? result.reasons : [];
-                if (reasons.length === 0) {
+        if (reasonsList) {
+            reasonsList.innerHTML = '';
+            if (found.length > 0) {
+                found.forEach(w => {
                     const li = document.createElement('li');
-                    li.textContent = 'No obvious red flags detected from the provided details.';
+                    li.textContent = w;
                     reasonsList.appendChild(li);
-                } else {
-                    reasons.forEach((reason) => {
-                        const li = document.createElement('li');
-                        li.textContent = reason;
-                        reasonsList.appendChild(li);
-                    });
-                }
-
-                scamAnalyzerForm.style.display = 'none';
-                analysisResults.style.display = 'block';
-                analysisResults.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            } catch (error) {
-                console.error('Analysis error:', error);
-                alert('Could not analyze right now. Please confirm backend is running on port 5000.');
-            } finally {
-                analyzeSubmitBtn.innerHTML = originalText;
-                analyzeSubmitBtn.disabled = false;
+                });
+            } else {
+                const li = document.createElement('li');
+                li.textContent = 'No obvious scam signals detected.';
+                reasonsList.appendChild(li);
             }
-        });
+        }
+
+        resultDiv.style.display = 'block';
+        resultDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
+
+    window.startAnalysis = async function startAnalysis() {
+        const resultDiv = document.getElementById('detection-result');
+        const analyzeBtn = document.querySelector('.analyze-now-btn');
+        const originalLabel = analyzeBtn ? analyzeBtn.textContent : '';
+
+        if (analyzeBtn) {
+            analyzeBtn.textContent = '⏳ Processing...';
+            analyzeBtn.disabled = true;
+        }
+        if (resultDiv) resultDiv.style.display = 'none';
+
+        try {
+            if (_analyzerMode === 'text-tab') {
+                const textEl = document.getElementById('job-text');
+                const text = textEl ? textEl.value.trim() : '';
+                if (!text) { alert('Please paste some job details first.'); return; }
+                detectScamLogic(text);
+
+                // Also hit the backend for deeper analysis
+                try {
+                    const resp = await fetch('/api/analyze-job', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ rawText: text })
+                    });
+                    if (resp.ok) {
+                        const result = await resp.json();
+                        const riskBadge = document.getElementById('riskBadge');
+                        const riskScore = document.getElementById('riskScore');
+                        const reasonsList = document.getElementById('reasonsList');
+                        if (riskBadge) {
+                            riskBadge.className = `risk-badge risk-${String(result.risk || 'Low').toLowerCase()}`;
+                            riskBadge.textContent = `${String(result.risk || 'Low')} Risk`;
+                        }
+                        if (riskScore) riskScore.textContent = Number.isFinite(result.score) ? String(result.score) : '0';
+                        if (reasonsList) {
+                            reasonsList.innerHTML = '';
+                            const reasons = Array.isArray(result.reasons) ? result.reasons : [];
+                            reasons.forEach(r => { const li = document.createElement('li'); li.textContent = r; reasonsList.appendChild(li); });
+                        }
+                        await initFirebase();
+                        await saveAnalysisToFirestore({ rawText: text }, result);
+                    }
+                } catch (_) { /* backend unreachable — local result already shown */ }
+
+            } else {
+                const fileInput = document.getElementById('job-image');
+                if (!fileInput || fileInput.files.length === 0) {
+                    alert('Please upload an image first!');
+                    return;
+                }
+                if (typeof Tesseract === 'undefined') {
+                    alert('OCR library is loading. Please wait a moment and try again.');
+                    return;
+                }
+                const { data: { text } } = await Tesseract.recognize(fileInput.files[0], 'eng', {
+                    logger: () => {}
+                });
+                detectScamLogic(text);
+            }
+        } finally {
+            if (analyzeBtn) {
+                analyzeBtn.textContent = originalLabel;
+                analyzeBtn.disabled = false;
+            }
+        }
+    };
 
     // ========== REMOTE JOBS LOADER ==========
     const dummyRemoteJobs = [

@@ -79,51 +79,64 @@
       <div class="section-header text-center reveal">
         <span class="badge-primary">⚡ Instant Analysis</span>
         <h2>Check Any Job Offer Instantly</h2>
-        <p>Paste a job message, recruiter email, or company website and get AI-powered scam detection results in seconds.</p>
+        <p>Paste text or upload a screenshot to get AI-powered scam detection results in seconds.</p>
       </div>
 
       <div class="analyzer-container reveal">
         <div class="analyzer-box">
-          <form id="scamAnalyzerForm">
-            <div class="form-row">
-              <div class="form-group">
-                <label for="rawJobText">Paste Job Details (All-in-One)</label>
-                <textarea id="rawJobText" name="rawText" placeholder="Paste everything here: job description, recruiter email, website URL/domain, salary, joining details, and any message text..." rows="8"></textarea>
-              </div>
+
+          <!-- Tab Switcher -->
+          <div class="method-tabs">
+            <button class="tab-btn active" onclick="switchTab('text-tab', event)">📝 Paste Text</button>
+            <button class="tab-btn" onclick="switchTab('image-tab', event)">📷 Upload Screenshot</button>
+          </div>
+
+          <!-- Text Tab -->
+          <div id="text-tab" class="tab-content active">
+            <div class="form-group">
+              <label for="job-text">Paste Job Details</label>
+              <textarea id="job-text" rows="8" placeholder="Paste job description, recruiter email, message text, or website URL here..."></textarea>
             </div>
+          </div>
 
-            <button type="submit" class="btn btn-primary btn-lg" id="analyzeSubmitBtn">
-              <i class="fa-solid fa-magnifying-glass"></i>
-              Analyze Now
-            </button>
-          </form>
+          <!-- Image Tab -->
+          <div id="image-tab" class="tab-content">
+            <div class="upload-container">
+              <input type="file" id="job-image" accept="image/*" onchange="previewImage(event)" style="display:none;">
+              <label for="job-image" class="upload-label">
+                <i class="fas fa-cloud-upload-alt"></i> Click to Upload Screenshot
+              </label>
+              <img id="img-preview" alt="Preview" style="display:none; max-width:100%; border-radius:10px; margin-top:14px;">
+            </div>
+          </div>
 
-          <!-- Results Section -->
-          <div id="analysisResults" class="analysis-results" style="display: none;">
+          <button class="analyze-now-btn" onclick="startAnalysis()">
+            🔍 Analyze Now
+          </button>
+
+          <!-- Results Card -->
+          <div id="detection-result" class="analysis-results" style="display:none;">
             <div class="result-header">
-              <h3>Analysis Results</h3>
-              <button type="button" class="btn-close" onclick="document.getElementById('analysisResults').style.display='none';">✕</button>
+              <h3 id="result-status"></h3>
+              <button type="button" class="btn-close" onclick="document.getElementById('detection-result').style.display='none';">✕</button>
             </div>
-
             <div class="risk-indicator">
-              <div class="risk-badge risk-low" id="riskBadge">Low Risk</div>
+              <div class="risk-badge" id="riskBadge">—</div>
               <div class="risk-score">
                 <span class="score-label">Risk Score:</span>
                 <span class="score-value" id="riskScore">0</span><span class="score-unit">/100</span>
               </div>
             </div>
-
             <div class="reasons-box">
               <h4>Detection Results:</h4>
-              <ul id="reasonsList" class="reasons-list">
-              </ul>
+              <p id="risk-details" style="color: var(--text-secondary); font-size:0.95rem;"></p>
+              <ul id="reasonsList" class="reasons-list"></ul>
             </div>
-
             <div class="result-footer">
-              <p class="result-note"><i class="fa-solid fa-circle-info"></i> These results are based on keyword analysis and domain verification.</p>
-              <button type="button" class="btn btn-secondary" onclick="document.getElementById('analysisResults').style.display='none';">Analyze Another</button>
+              <button type="button" class="btn btn-secondary" onclick="document.getElementById('detection-result').style.display='none';">Analyze Another</button>
             </div>
           </div>
+
         </div>
       </div>
     </div>
@@ -407,6 +420,8 @@
     </div>
   </footer>
 
+  <!-- Tesseract OCR for screenshot analysis -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
   <script src="https://www.gstatic.com/firebasejs/12.10.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/12.10.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore-compat.js"></script>
