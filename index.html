@@ -205,24 +205,28 @@
       </div>
 
       <div class="skill-gap-card reveal">
-        <div class="skill-gap-form">
+        <div class="skill-gap-form skill-analyzer-container">
           <div class="form-group">
-            <label for="currentSkillsInput">Current Skills (comma separated)</label>
-            <textarea id="currentSkillsInput" rows="5" placeholder="Example: Excel, SQL, Python, Power BI"></textarea>
+            <label for="current-skills">Current Skills (comma separated)</label>
+            <textarea id="current-skills" rows="5" placeholder="Enter skills like React, SQL, Python..."></textarea>
           </div>
 
           <div class="form-group">
-            <label for="targetRoleInput">Target Role</label>
-            <input id="targetRoleInput" type="text" placeholder="Example: Data Analyst, AI/ML Engineer, Web Developer" />
+            <label for="target-role">Target Role</label>
+            <select id="target-role" class="skill-role-select">
+              <option value="Web Developer">Web Developer</option>
+              <option value="Data Analyst">Data Analyst</option>
+              <option value="AI/ML Engineer">AI/ML Engineer</option>
+            </select>
           </div>
 
-          <button type="button" id="checkSkillGapBtn" class="btn btn-primary btn-lg">
+          <button type="button" onclick="analyzeGap()" class="btn btn-primary btn-lg">
             <i class="fa-solid fa-list-check"></i>
             Check Gap
           </button>
         </div>
 
-        <div id="skillGapResults" class="skill-gap-results" style="display: none;">
+        <div id="analysis-results" class="skill-gap-results" style="display: none;">
           <div class="skill-gap-back-row">
             <button type="button" id="skillGapBackBtn" class="btn btn-secondary skill-gap-back-btn">
               <i class="fa-solid fa-arrow-left"></i>
@@ -230,10 +234,8 @@
             </button>
           </div>
 
-          <div class="skill-gap-result-block">
-            <h3>Skills to Learn <span class="skill-gap-role-label" id="skillGapRoleLabel"></span></h3>
-            <ol id="skillGapList" class="learning-order-list"></ol>
-          </div>
+          <h3 style="margin-bottom: 16px;">Your Learning Roadmap</h3>
+          <div id="course-list" class="course-grid"></div>
         </div>
       </div>
     </div>

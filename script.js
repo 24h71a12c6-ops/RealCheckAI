@@ -149,6 +149,70 @@ if (reportForm) {
     });
 }
 
+// ========== SKILL ROADMAP DATA ==========
+const skillRoadmap = {
+    "Web Developer": [
+        { skill: "HTML/CSS",        title: "HTML & CSS Full Course",     link: "https://www.youtube.com/watch?v=mU6anWqZJcc" },
+        { skill: "JavaScript",     title: "Modern JS for Beginners",    link: "https://www.youtube.com/watch?v=jS4aFq5-91M" },
+        { skill: "React",          title: "React JS Crash Course",       link: "https://www.youtube.com/watch?v=bMknfKXIFA8" }
+    ],
+    "Data Analyst": [
+        { skill: "Excel",          title: "Advanced Excel Tutorial",     link: "https://www.youtube.com/watch?v=Vl0hux8aHY0" },
+        { skill: "SQL",            title: "SQL Full Course",              link: "https://www.youtube.com/watch?v=HXV3zePRqGY" },
+        { skill: "Python",         title: "Python for Data Science",     link: "https://www.youtube.com/watch?v=rfscVS0vtbw" }
+    ],
+    "AI/ML Engineer": [
+        { skill: "Python",         title: "Python for AI",               link: "https://www.youtube.com/watch?v=NWONeJKn6kc" },
+        { skill: "Maths",          title: "Linear Algebra for ML",       link: "https://www.youtube.com/watch?v=u0TIDZ-I690" },
+        { skill: "Neural Networks",title: "Deep Learning Specialization",link: "https://www.youtube.com/watch?v=aircAruvnKk" }
+    ]
+};
+
+function analyzeGap() {
+    const skillsEl   = document.getElementById('current-skills');
+    const roleEl     = document.getElementById('target-role');
+    const resultsEl  = document.getElementById('analysis-results');
+    const courseList = document.getElementById('course-list');
+    const gapForm    = document.querySelector('.skill-gap-form');
+
+    const currentSkills = skillsEl ? skillsEl.value : '';
+    const targetRole    = roleEl  ? roleEl.value  : '';
+
+    if (!currentSkills.trim()) {
+        alert('Please enter your current skills.');
+        return;
+    }
+
+    const skillsLower = currentSkills.toLowerCase();
+    const required    = skillRoadmap[targetRole] || [];
+    const missing     = required.filter(item => !skillsLower.includes(item.skill.toLowerCase()));
+
+    if (!resultsEl || !courseList) return;
+    courseList.innerHTML = '';
+
+    if (missing.length > 0) {
+        missing.forEach(item => {
+            courseList.innerHTML += `
+                <div class="course-card glass">
+                    <div class="course-badge">Free Course</div>
+                    <h4>Missing Skill: ${item.skill}</h4>
+                    <p>${item.title}</p>
+                    <a href="${item.link}" target="_blank" rel="noopener noreferrer" class="watch-btn">
+                        <i class="fab fa-youtube"></i> Watch on YouTube
+                    </a>
+                </div>`;
+        });
+    } else {
+        courseList.innerHTML = '<p class="success-msg">You are job-ready for this role! 🎉</p>';
+    }
+
+    if (gapForm) gapForm.style.display = 'none';
+    resultsEl.style.display = 'block';
+    resultsEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+window.analyzeGap = analyzeGap;
+
 // ========== SPLASH SCREEN & REGISTRATION LOGIC ==========
 document.addEventListener('DOMContentLoaded', () => {
     const splash = document.getElementById('splashScreen');
@@ -626,166 +690,24 @@ document.addEventListener('DOMContentLoaded', () => {
     loadJobs();
 
     // ========== SKILL GAP ANALYZER ==========
-    const currentSkillsInput = document.getElementById('currentSkillsInput');
-    const targetRoleInput = document.getElementById('targetRoleInput');
-    const checkSkillGapBtn = document.getElementById('checkSkillGapBtn');
-    const skillGapResults = document.getElementById('skillGapResults');
-    const skillGapList = document.getElementById('skillGapList');
-    const skillGapRoleLabel = document.getElementById('skillGapRoleLabel');
-
-    const roleSkillsMap = {
-        'data analyst': [
-            'Excel',
-            'SQL',
-            'Python',
-            'Power BI/Tableau',
-            'Statistics',
-            'Data Cleaning',
-            'Data Visualization'
-        ],
-        'ai/ml engineer': [
-            'Python',
-            'Statistics',
-            'Linear Algebra',
-            'Machine Learning',
-            'Deep Learning',
-            'TensorFlow/PyTorch',
-            'MLOps'
-        ],
-        'web developer': [
-            'HTML',
-            'CSS',
-            'JavaScript',
-            'React',
-            'Node.js',
-            'Git/GitHub',
-            'REST APIs'
-        ],
-        'frontend developer': [
-            'HTML',
-            'CSS',
-            'JavaScript',
-            'React',
-            'Responsive Design',
-            'Git/GitHub',
-            'Web Performance'
-        ],
-        'backend developer': [
-            'Node.js/Java/Python',
-            'Databases',
-            'REST APIs',
-            'Authentication',
-            'System Design Basics',
-            'Git/GitHub',
-            'Cloud Basics'
-        ]
-    };
-
-    const roleAliases = {
-        'data analyst': ['analyst', 'business analyst'],
-        'ai/ml engineer': ['ml engineer', 'ai engineer', 'machine learning engineer', 'data scientist'],
-        'web developer': ['full stack developer', 'fullstack developer', 'developer'],
-        'frontend developer': ['front end developer', 'ui developer'],
-        'backend developer': ['back end developer', 'server developer']
-    };
-
-    const normalizeText = (value) => String(value || '').trim().toLowerCase();
-
-    const parseSkills = (value) => {
-        return String(value || '')
-            .split(',')
-            .map((item) => item.trim())
-            .filter(Boolean);
-    };
-
-    const normalizeSkill = (skill) => normalizeText(skill).replace(/\s+/g, ' ');
-
-    const resolveRoleKey = (inputRole) => {
-        const normalizedRole = normalizeText(inputRole);
-        if (!normalizedRole) return null;
-
-        if (roleSkillsMap[normalizedRole]) {
-            return normalizedRole;
-        }
-
-        for (const [roleKey, aliases] of Object.entries(roleAliases)) {
-            if (normalizedRole.includes(roleKey) || aliases.some((alias) => normalizedRole.includes(alias))) {
-                return roleKey;
-            }
-        }
-
-        return null;
-    };
-
-    const hasSkill = (userSkillSet, requiredSkill) => {
-        const req = normalizeSkill(requiredSkill);
-        for (const userSkill of userSkillSet) {
-            if (userSkill.includes(req) || req.includes(userSkill)) {
-                return true;
-            }
-        }
-        return false;
-    };
-
     const skillGapForm = document.querySelector('.skill-gap-form');
     const skillGapBackBtn = document.getElementById('skillGapBackBtn');
 
     if (skillGapBackBtn) {
         skillGapBackBtn.addEventListener('click', () => {
-            skillGapResults.style.display = 'none';
-            if (skillGapList) skillGapList.innerHTML = '';
-            if (skillGapRoleLabel) skillGapRoleLabel.textContent = '';
-            if (currentSkillsInput) currentSkillsInput.value = '';
-            if (targetRoleInput) targetRoleInput.value = '';
-            if (skillGapForm) {
-                skillGapForm.style.display = 'grid';
+            const resultsEl  = document.getElementById('analysis-results');
+            const courseList = document.getElementById('course-list');
+            const skillsEl  = document.getElementById('current-skills');
+            const roleEl    = document.getElementById('target-role');
+            if (resultsEl)  resultsEl.style.display = 'none';
+            if (courseList) courseList.innerHTML = '';
+            if (skillsEl)   skillsEl.value = '';
+            if (roleEl)     roleEl.selectedIndex = 0;
+            if (skillGapForm) skillGapForm.style.display = 'grid';
+            if (resultsEl) {
+                const card = resultsEl.closest('.skill-gap-card');
+                if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }
-            skillGapResults.closest('.skill-gap-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
-        });
-    }
-
-    if (checkSkillGapBtn && currentSkillsInput && targetRoleInput && skillGapResults && skillGapList) {
-        checkSkillGapBtn.addEventListener('click', () => {
-            const skillsRaw = currentSkillsInput.value;
-            const roleRaw = targetRoleInput.value;
-
-            const roleKey = resolveRoleKey(roleRaw);
-            if (!roleKey) {
-                alert('Please enter a recognized role, for example: Data Analyst, AI/ML Engineer, Web Developer, Frontend Developer, Backend Developer.');
-                return;
-            }
-
-            const currentSkills = parseSkills(skillsRaw);
-            if (currentSkills.length === 0) {
-                alert('Please enter your current skills separated by commas.');
-                return;
-            }
-
-            const userSkillSet = new Set(currentSkills.map(normalizeSkill));
-            const requiredSkills = roleSkillsMap[roleKey] || [];
-
-            const missingSkills = requiredSkills.filter((requiredSkill) => !hasSkill(userSkillSet, requiredSkill));
-
-            skillGapList.innerHTML = '';
-            if (skillGapRoleLabel) skillGapRoleLabel.textContent = `— ${roleRaw.trim()}`;
-
-            if (missingSkills.length === 0) {
-                const li = document.createElement('li');
-                li.textContent = 'Great job — you already cover the essential skill set for this role. Focus on projects and interview prep next.';
-                skillGapList.appendChild(li);
-            } else {
-                missingSkills.forEach((skill) => {
-                    const li = document.createElement('li');
-                    li.textContent = skill;
-                    skillGapList.appendChild(li);
-                });
-            }
-
-            if (skillGapForm) {
-                skillGapForm.style.display = 'none';
-            }
-            skillGapResults.style.display = 'block';
-            skillGapResults.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         });
     }
 });
