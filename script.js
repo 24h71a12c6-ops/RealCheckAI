@@ -16,6 +16,7 @@ const observerOptions = {
 
 window.runAnalysis = async function runAnalysis() {
     const btn = document.getElementById('analyzeBtn');
+    const resetBtn = document.getElementById('resetBtn');
     const textEl = document.getElementById('jobDetails');
     const resultDiv = document.getElementById('analysisResult');
 
@@ -40,20 +41,59 @@ window.runAnalysis = async function runAnalysis() {
     const verdict = document.getElementById('verdictText');
     const scoreText = document.getElementById('riskScore');
 
+    const escapeHtmlSimple = (value) => String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+
+    const normalizeSignals = (parts = []) => {
+        const bucket = [];
+        parts.forEach((entry) => {
+            if (Array.isArray(entry)) {
+                entry.forEach((inner) => bucket.push(inner));
+                return;
+            }
+
+            String(entry || '')
+                .split(/\n|\|/g)
+                .map((line) => line.trim())
+                .filter(Boolean)
+                .forEach((line) => bucket.push(line));
+        });
+
+        return [...new Set(bucket)];
+    };
+
+    const renderVerdict = (summaryText, signalParts) => {
+        if (!verdict) return;
+
+        const signals = normalizeSignals(signalParts);
+        const summary = `<p class="verdict-summary">${escapeHtmlSimple(summaryText || 'Analysis complete.')}</p>`;
+
+        if (!signals.length) {
+            verdict.innerHTML = summary;
+            return;
+        }
+
+        verdict.innerHTML = `${summary}<ul class="result-list">${signals.map((signal) => `<li>${escapeHtmlSimple(signal)}</li>`).join('')}</ul>`;
+    };
+
     const setBadgeUi = (riskLevel) => {
         const normalized = String(riskLevel || '').toLowerCase();
         if (!badge) return;
 
-        if (normalized === 'high') {
-            badge.innerText = '⚠ HIGH RISK';
+        if (normalized.includes('high') || normalized.includes('scam')) {
+            badge.innerText = '❌ HIGH RISK';
             badge.style.background = '#fee2e2';
             badge.style.color = '#dc2626';
-        } else if (normalized === 'medium') {
-            badge.innerText = '🟡 MEDIUM RISK';
+        } else if (normalized.includes('medium') || normalized.includes('suspicious')) {
+            badge.innerText = '⚠️ MEDIUM RISK';
             badge.style.background = '#ffedd5';
             badge.style.color = '#ea580c';
         } else {
-            badge.innerText = '✅ LOW RISK';
+            badge.innerText = '✅ SAFE';
             badge.style.background = '#dcfce7';
             badge.style.color = '#16a34a';
         }
@@ -82,14 +122,12 @@ window.runAnalysis = async function runAnalysis() {
         const fallbackRisk = fallbackScore >= 70 ? 'High' : fallbackScore >= 35 ? 'Medium' : 'Low';
         setBadgeUi(fallbackRisk);
 
-        if (verdict) {
-            if (fallbackRisk === 'High') {
-                verdict.innerText = `High-risk signals found: ${detected.slice(0, 5).join(', ')}. Do not share money or personal documents until verified.`;
-            } else if (fallbackRisk === 'Medium') {
-                verdict.innerText = `Some suspicious patterns found (${detected.slice(0, 5).join(', ')}). Verify recruiter identity, domain, and interview process.`;
-            } else {
-                verdict.innerText = "No strong local scam signal found. For deeper checks, ensure backend is running to verify domain age and LinkedIn/company presence.";
-            }
+        if (fallbackRisk === 'High') {
+            renderVerdict('High-risk signals found. Do not share money or personal documents until verified.', detected.slice(0, 5));
+        } else if (fallbackRisk === 'Medium') {
+            renderVerdict('Some suspicious patterns found. Verify recruiter identity, domain, and interview process.', detected.slice(0, 5));
+        } else {
+            renderVerdict('No strong local scam signal found. For deeper checks, keep backend running for domain age and LinkedIn/company verification.', []);
         }
     };
 
@@ -106,8 +144,11 @@ window.runAnalysis = async function runAnalysis() {
 
         const data = await response.json();
         const riskLevel = data.risk_level || data.risk || 'Low';
-        const score = Number.isFinite(data.score) ? data.score : 0;
-        const reasons = Array.isArray(data.reasons) ? data.reasons : [];
+        const scoreValue = Number(data.score);
+        const score = Number.isFinite(scoreValue) ? Math.max(0, Math.min(100, Math.round(scoreValue))) : 0;
+        const reasons = Array.isArray(data.reasons)
+            ? data.reasons
+            : String(data.reasons || '').split('|');
 
         if (scoreText) scoreText.innerText = String(score);
         setBadgeUi(riskLevel);
@@ -117,21 +158,41 @@ window.runAnalysis = async function runAnalysis() {
             : `Domain age: ${data.domain_status || 'not checked'}`;
 
         const linkedInLine = `LinkedIn/company check: ${String(data.linkedin_status || 'not_checked').replace(/_/g, ' ')}`;
-
-        const topReasons = reasons.length > 0
-            ? `\nSignals: ${reasons.slice(0, 4).join(' | ')}`
-            : '';
-
-        if (verdict) {
-            verdict.innerText = `${data.verdict || 'Analysis complete.'}\n${domainLine}\n${linkedInLine}${topReasons}`;
-        }
+        renderVerdict(data.verdict || 'Analysis complete.', [domainLine, linkedInLine, reasons.slice(0, 6)]);
     } catch (error) {
         console.warn('Instant analyzer backend call failed:', error.message);
         runLocalFallback();
     } finally {
         resultDiv.style.display = 'block';
+        if (btn) btn.style.display = 'none';
+        if (resetBtn) resetBtn.style.display = 'block';
         btn.innerText = original;
         btn.disabled = false;
+    }
+};
+
+window.resetForm = function resetForm() {
+    const textEl = document.getElementById('jobDetails');
+    const resultDiv = document.getElementById('analysisResult');
+    const btn = document.getElementById('analyzeBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const verdict = document.getElementById('verdictText');
+    const scoreText = document.getElementById('riskScore');
+    const badge = document.getElementById('riskBadge');
+
+    if (textEl) textEl.value = '';
+    if (resultDiv) resultDiv.style.display = 'none';
+    if (btn) {
+        btn.style.display = 'block';
+        btn.disabled = false;
+    }
+    if (resetBtn) resetBtn.style.display = 'none';
+    if (verdict) verdict.innerHTML = '';
+    if (scoreText) scoreText.innerText = '0';
+    if (badge) {
+        badge.innerText = '';
+        badge.style.background = 'transparent';
+        badge.style.color = '#002147';
     }
 };
 
@@ -792,7 +853,7 @@ const skillRoadmap = {
 function displayCourses(missing, courseList) {
     courseList.innerHTML = '';
     if (missing.length === 0) {
-        courseList.innerHTML = '<p class="success-msg">You are job-ready for this role! 🎉</p>';
+        courseList.innerHTML = '<p class="success-msg">No course recommendations needed right now — you already cover the key skills for this role. 🎉</p>';
         return;
     }
     missing.forEach(item => {
@@ -815,6 +876,33 @@ function displayCourses(missing, courseList) {
                 </div>
             </div>`;
     });
+}
+
+function renderMissingSkillsReport(roleKey, missingSkills) {
+    const reportEl = document.getElementById('missing-skills-report');
+    const titleEl = document.querySelector('.learning-path-title');
+    if (!reportEl) return;
+
+    if (!missingSkills.length) {
+        reportEl.innerHTML = `
+            <div class="skill-gap-report-card success">
+                <h3>Analysis Result</h3>
+                <p>You already match the core roadmap for <strong>${roleKey}</strong>. You're in great shape to start applying.</p>
+            </div>`;
+        if (titleEl) titleEl.style.display = 'none';
+        return;
+    }
+
+    reportEl.innerHTML = `
+        <div class="skill-gap-report-card">
+            <h3>Analysis Result</h3>
+            <p>Based on your target role <strong>${roleKey}</strong>, you need to focus on these missing skills first:</p>
+            <div class="missing-skills-container">
+                ${missingSkills.map((item) => `<span class="skill-badge-missing">${item.skill}</span>`).join('')}
+            </div>
+        </div>`;
+
+    if (titleEl) titleEl.style.display = 'block';
 }
 
 function analyzeGap() {
@@ -848,6 +936,7 @@ function analyzeGap() {
     const required    = skillRoadmap[resolvedRoleKey] || [];
     const missing     = required.filter(item => !skillsLower.includes(item.skill.toLowerCase()));
 
+    renderMissingSkillsReport(resolvedRoleKey, missing);
     displayCourses(missing, courseList);
 
     if (gapForm) gapForm.style.display = 'none';
@@ -1908,10 +1997,14 @@ document.addEventListener('DOMContentLoaded', () => {
         skillGapBackBtn.addEventListener('click', () => {
             const resultsEl  = document.getElementById('analysis-results');
             const courseList = document.getElementById('course-list');
+            const reportEl   = document.getElementById('missing-skills-report');
+            const titleEl    = document.querySelector('.learning-path-title');
             const skillsEl  = document.getElementById('current-skills');
             const roleEl    = document.getElementById('target-role');
             if (resultsEl)  resultsEl.style.display = 'none';
             if (courseList) courseList.innerHTML = '';
+            if (reportEl)   reportEl.innerHTML = '';
+            if (titleEl)    titleEl.style.display = 'block';
             if (skillsEl)   skillsEl.value = '';
             if (roleEl)     roleEl.value = '';
             if (skillGapForm) skillGapForm.style.display = 'flex';

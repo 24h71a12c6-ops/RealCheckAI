@@ -807,6 +807,33 @@ body.light .view-btn:hover {
   font-size: 0.9rem;
 }
 
+.verdict-summary {
+  margin: 0 0 12px;
+  color: #002147;
+  font-weight: 600;
+}
+
+.result-list {
+  text-align: left;
+  list-style-type: disc;
+  padding-left: 20px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.result-list li {
+  color: #334155;
+  margin-bottom: 6px;
+}
+
+body.light .verdict-summary {
+  color: #1f2b06;
+}
+
+body.light .result-list li {
+  color: #2d3f08;
+}
+
 .reasons-box {
   margin-bottom: 20px;
 }
@@ -1227,6 +1254,66 @@ body.light .how-step-content p {
   margin-top: 28px;
   padding-top: 24px;
   border-top: 1px solid var(--border);
+}
+
+.skill-gap-report {
+  margin-bottom: 22px;
+}
+
+.skill-gap-report-card {
+  background: rgba(var(--primary-rgb), 0.06);
+  border: 1px solid rgba(var(--primary-rgb), 0.18);
+  border-radius: 18px;
+  padding: 22px;
+}
+
+.skill-gap-report-card.success {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.24);
+}
+
+.skill-gap-report-card h3 {
+  margin-bottom: 10px;
+}
+
+.skill-gap-report-card p {
+  color: var(--text-secondary);
+  margin-bottom: 14px;
+}
+
+.missing-skills-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.skill-badge-missing {
+  background: rgba(255, 71, 87, 0.1);
+  border: 1px solid #ff4757;
+  color: #ff4757;
+  padding: 5px 12px;
+  border-radius: 20px;
+  display: inline-block;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.learning-path-title {
+  margin-bottom: 16px;
+}
+
+body.light .skill-gap-report-card {
+  background: #edf4de;
+  border-color: #c8dea0;
+}
+
+body.light .skill-gap-report-card.success {
+  background: #e8f8ee;
+  border-color: #b7e2c5;
+}
+
+body.light .skill-gap-report-card p {
+  color: #3a5010;
 }
 
 .database-card {

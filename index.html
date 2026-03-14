@@ -164,12 +164,16 @@
           🔍 Analyze Now
         </button>
 
+        <button onclick="resetForm()" id="resetBtn" style="width: auto; min-width: 200px; padding: 14px 40px; display: none; margin: 14px auto 0; background: #0f172a; color: #ffffff; border: none; border-radius: 50px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s; box-shadow: 0 5px 15px rgba(15, 23, 42, 0.22);">
+          Analyze Another
+        </button>
+
         <div id="analysisResult" style="display: none; margin-top: 30px; padding: 25px; border-radius: 15px; background: #f8faff; border: 1px solid #e0e7ff;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
             <span id="riskBadge" style="padding: 8px 16px; border-radius: 50px; font-weight: bold; font-size: 14px;"></span>
             <span style="color: #666; font-size: 14px;">Risk Score: <strong id="riskScore" style="color: #002147;">0</strong>/100</span>
           </div>
-          <p id="verdictText" style="color: #002147; font-size: 16px; font-weight: 500;"></p>
+          <div id="verdictText" style="color: #002147; font-size: 16px; font-weight: 500;"></div>
         </div>
 
       </div>
@@ -265,7 +269,8 @@
             </button>
           </div>
 
-          <h3 style="margin-bottom: 16px;">Your Learning Roadmap</h3>
+          <div id="missing-skills-report" class="skill-gap-report"></div>
+          <h3 class="learning-path-title" style="margin-bottom: 16px;">Recommended Learning Path</h3>
           <div id="course-list" class="course-grid"></div>
         </div>
       </div>
