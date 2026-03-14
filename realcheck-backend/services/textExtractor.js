@@ -99,6 +99,27 @@ function extractCompanyNameFromText(text) {
   const atPattern = raw.match(/(?:role|position|internship|job)\s*[:\-]?.{0,60}\bat\s+([A-Z][A-Za-z0-9&.,\- ]{2,60})/i);
   if (atPattern && atPattern[1]) return atPattern[1].trim();
 
+  // Common signature: name/role lines followed by company line before email.
+  const lines = raw
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const companySuffix = /\b(pvt\.?|private|ltd\.?|limited|inc\.?|llc|corp\.?|corporation|technologies|technology|solutions|systems)\b/i;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (companySuffix.test(line)) {
+      return line.replace(/^company\s*[:\-]\s*/i, "").trim();
+    }
+  }
+
+  // Pattern like "Recruiter from <Company Name>"
+  const fromPattern = raw.match(/(?:from|at)\s+([A-Z][A-Za-z0-9&.,\- ]{2,80})(?:\n|\r|,|\.)/i);
+  if (fromPattern && fromPattern[1] && companySuffix.test(fromPattern[1])) {
+    return fromPattern[1].trim();
+  }
+
   return null;
 }
 

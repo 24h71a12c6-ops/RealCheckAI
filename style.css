@@ -42,6 +42,59 @@ body {
   overflow-x: hidden;
 }
 
+.topbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  background: #000000;
+  color: #ffffff;
+  z-index: 1100;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.topbar-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 10px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.topbar-email {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #ffffff;
+  font-size: 0.92rem;
+  font-weight: 500;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.topbar-right a {
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.topbar-email:hover,
+.topbar-right a:hover {
+  color: var(--primary);
+}
+
+.topbar-right a:hover {
+  transform: translateY(-2px);
+}
+
 a { text-decoration: none; color: inherit; }
 ul { list-style: none; }
 button { font-family: inherit; cursor: pointer; }
@@ -90,7 +143,7 @@ body.light .skill-gap-back-btn:hover {
 
 /* ========== NAVBAR ========== */
 .navbar {
-  position: fixed; top: 0; left: 0; width: 100%;
+  position: fixed; top: 45px; left: 0; width: 100%;
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(12px); border-bottom: 1px solid rgba(var(--primary-rgb),0.25);
   z-index: 1000; transition: all 0.3s ease;
@@ -163,6 +216,14 @@ body.light .theme-toggle-btn {
   color: #3a5010;
 }
 body.light .theme-toggle-btn:hover { border-color: #6F9D08; color: #6F9D08; }
+body.light .topbar {
+  background: #000000;
+  color: #ffffff;
+}
+body.light .topbar-email,
+body.light .topbar-right a {
+  color: #ffffff;
+}
 /* All section backgrounds → white in light mode */
 body.light .section-bg,
 body.light .trust-section,
@@ -3094,6 +3155,26 @@ body.light #analysisResult {
 }
 
 @media (max-width: 768px) {
+  .topbar {
+    position: static;
+  }
+
+  .topbar-container {
+    padding: 10px 16px;
+    flex-direction: column;
+    justify-content: center;
+    text-align: center;
+    gap: 8px;
+  }
+
+  .topbar-email {
+    font-size: 0.84rem;
+  }
+
+  .navbar {
+    top: 0;
+  }
+
   .nav-links { display: none; }
   .nav-actions .btn { display: none; }
   .mobile-menu-btn { display: block; }

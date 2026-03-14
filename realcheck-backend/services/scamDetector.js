@@ -66,10 +66,56 @@ const sophisticatedScamPatterns = [
   /scanned\s*copy.*id|government.*proof/i
 ];
 
+const suspiciousDomainTlds = [
+  ".xyz", ".top", ".click", ".work", ".live", ".loan", ".gq", ".ml", ".cf", ".tk"
+];
+
+const suspiciousDomainWords = [
+  "jobs", "career", "careers", "portal", "hiring", "apply", "offer", "hr"
+];
+
+const displayNameBrandHints = [
+  "tcs", "infosys", "wipro", "accenture", "google", "microsoft", "amazon", "deloitte", "cognizant", "ibm"
+];
+
+const additionalPaymentTrapPatterns = [
+  /refundable\s*(security\s*)?deposit/i,
+  /documentation\s*fee/i,
+  /laptop\s*insurance/i,
+  /training\s*(module|kit|program)\s*(fee|charge|payment)/i,
+  /upfront\s*payment/i,
+  /pay\s*before\s*(joining|training|internship|onboarding)/i
+];
+
+const fastSelectionPatterns = [
+  /selected\s*within\s*\d+\s*(minutes?|hours?)/i,
+  /offer\s*letter\s*in\s*\d+\s*(minutes?|hours?)/i,
+  /direct\s*selection/i,
+  /instant\s*offer/i
+];
+
+const genericSalutations = [
+  /dear\s+candidate/i,
+  /dear\s+applicant/i,
+  /dear\s+selected\s+candidate/i,
+  /to\s+whom\s+it\s+may\s+concern/i
+];
+
+const sensitivePreHiringPatterns = [
+  /aadhar|aadhaar|pan\s*card|passport|driving\s*license/i,
+  /bank\s*otp|otp\s*for\s*verification/i,
+  /bank\s*balance|account\s*balance/i,
+  /parents'?\s*occupation|father'?s\s*occupation|mother'?s\s*occupation/i
+];
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function normalizeText(value) {
   return String(value || "").toLowerCase();
+}
+
+function uniqueNonEmpty(values) {
+  return Array.from(new Set((values || []).filter(Boolean)));
 }
 
 function extractDomain(url) {
@@ -87,6 +133,246 @@ function buildUrl(input) {
   const s = String(input || "").trim();
   if (!s) return null;
   return /^https?:\/\//i.test(s) ? s : `https://${s}`;
+}
+
+function getRootDomain(domain) {
+  const d = String(domain || "").toLowerCase();
+  if (!d) return "";
+  const parts = d.split(".").filter(Boolean);
+  if (parts.length < 2) return d;
+  return `${parts[parts.length - 2]}.${parts[parts.length - 1]}`;
+}
+
+function extractMetadataFromText(text) {
+  const raw = String(text || "");
+
+  const emails = Array.from(
+    new Set((raw.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || []).map((e) => e.toLowerCase()))
+  );
+
+  const urls = Array.from(
+    new Set(raw.match(/(?:https?:\/\/|www\.)[^\s)]+/gi) || [])
+  );
+  const cleanUrls = urls.map((u) => String(u).replace(/[.,;:!?]+$/g, ""));
+
+  const phones = Array.from(
+    new Set(
+      (raw.match(/(?:\+?\d{1,3}[\s-]?)?(?:\(?\d{3,5}\)?[\s-]?)?\d{3,5}[\s-]?\d{4,5}/g) || [])
+        .map((p) => p.replace(/\s+/g, " ").trim())
+        .filter((p) => p.replace(/\D/g, "").length >= 10)
+    )
+  );
+
+  const inrAmounts = Array.from(
+    new Set(
+      (raw.match(/(?:₹|INR|Rs\.?)[\s]*\d[\d,]*/gi) || [])
+        .map((a) => a.replace(/\s+/g, " ").trim())
+    )
+  );
+
+  return {
+    emails,
+    urls: cleanUrls,
+    phones,
+    inr_amount_mentions: inrAmounts,
+    has_contact_number: phones.length > 0,
+    has_public_email: emails.some((e) => {
+      const d = e.split("@")[1] || "";
+      return freeEmailDomains.includes(d);
+    })
+  };
+}
+
+function looksLikeSuspiciousDomain(domain) {
+  const d = String(domain || "").toLowerCase();
+  if (!d) return false;
+
+  const hasSuspiciousTld = suspiciousDomainTlds.some((tld) => d.endsWith(tld));
+  if (hasSuspiciousTld) return true;
+
+  const labels = d.split(".");
+  const left = labels.slice(0, -1).join(".");
+  const hyphenCount = (left.match(/-/g) || []).length;
+  const hasManyHyphens = hyphenCount >= 2;
+  const hasSuspiciousWordCombo = suspiciousDomainWords.filter((w) => left.includes(w)).length >= 2;
+
+  return hasManyHyphens || hasSuspiciousWordCombo;
+}
+
+function extractMonthlyCompensationInInr(text) {
+  const msg = String(text || "").toLowerCase();
+  if (!msg) return null;
+
+  // "1 lakh per month" / "2 lpa"
+  const lakhPerMonth = msg.match(/(\d+(?:\.\d+)?)\s*lakh\s*(per\s*month|\/\s*month|monthly)/i);
+  if (lakhPerMonth) {
+    return Number(lakhPerMonth[1]) * 100000;
+  }
+
+  // "12 lpa" => monthly approximation
+  const lpaMatch = msg.match(/(\d+(?:\.\d+)?)\s*lpa/i);
+  if (lpaMatch) {
+    return (Number(lpaMatch[1]) * 100000) / 12;
+  }
+
+  // "₹50000 per month" / "inr 60000 monthly"
+  const inrPerMonth = msg.match(/(?:₹|inr|rs\.?)[\s]*([\d,]+)\s*(per\s*month|\/\s*month|monthly)/i);
+  if (inrPerMonth) {
+    return Number(String(inrPerMonth[1]).replace(/,/g, ""));
+  }
+
+  return null;
+}
+
+function parseJsonObjectSafe(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    const m = raw.match(/\{[\s\S]*\}/);
+    if (!m) return null;
+    try {
+      return JSON.parse(m[0]);
+    } catch {
+      return null;
+    }
+  }
+}
+
+async function callGeminiAnalysis(userInput) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return {
+      ai_score: null,
+      reason: "Gemini key unavailable.",
+      markers: [],
+      source: "fallback"
+    };
+  }
+
+  const systemInstruction = `
+Analyze the provided job recruitment text as a forensic linguist.
+Ignore company reputation. Focus ONLY on:
+1. Linguistic Manipulation (Urgency, FOMO, "Vague" tasks).
+2. Structural Anomalies (Personal email for MNC roles).
+3. Call-to-action (Asking for money/sensitive data).
+
+Output ONLY valid JSON:
+{"ai_score": <0-100>, "reason": "<one_sentence_logic>", "markers": []}
+`;
+
+  const preferredModel = process.env.GEMINI_MODEL;
+  const modelCandidates = Array.from(
+    new Set([preferredModel, "gemini-2.0-flash", "gemini-1.5-flash"].filter(Boolean))
+  );
+
+  let lastError = null;
+  for (const model of modelCandidates) {
+    try {
+      const response = await axios.post(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        {
+          generationConfig: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: "OBJECT",
+              properties: {
+                ai_score: { type: "NUMBER" },
+                reason: { type: "STRING" },
+                markers: {
+                  type: "ARRAY",
+                  items: { type: "STRING" }
+                }
+              },
+              required: ["ai_score", "reason", "markers"]
+            }
+          },
+          contents: [
+            {
+              parts: [
+                {
+                  text: `${systemInstruction}\n\nJob text:\n${String(userInput || "").slice(0, 10000)}`
+                }
+              ]
+            }
+          ]
+        },
+        {
+          headers: { "Content-Type": "application/json" },
+          timeout: 20000
+        }
+      );
+
+      const raw = response?.data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      const parsed = parseJsonObjectSafe(raw) || {};
+
+      const score = Number(parsed.ai_score);
+      const aiScore = Number.isFinite(score) ? Math.max(0, Math.min(100, Math.round(score))) : null;
+
+      return {
+        ai_score: aiScore,
+        reason: String(parsed.reason || "Contextual manipulation assessment complete."),
+        markers: Array.isArray(parsed.markers) ? parsed.markers.map((m) => String(m)) : [],
+        source: `gemini:${model}`
+      };
+    } catch (error) {
+      lastError = error;
+      const blockReason = error?.response?.data || null;
+      console.error("Gemini error", {
+        model,
+        status: error?.response?.status,
+        data: blockReason
+      });
+    }
+  }
+
+  {
+    return {
+      ai_score: null,
+      reason: `Gemini unavailable (${lastError ? lastError.message : "unknown error"}); fallback to hard-rules score.`,
+      markers: [],
+      source: "fallback"
+    };
+  }
+}
+
+async function getHybridScore(userInput, hardRulesResult) {
+  const llmAnalysis = await callGeminiAnalysis(userInput);
+
+  const HARD_WEIGHT = 0.7;
+  const LLM_WEIGHT = 0.3;
+
+  const hardScore = Number(hardRulesResult.scam_score || 0);
+  const hasLiveLlm = Number.isFinite(llmAnalysis.ai_score);
+
+  // If LLM fails, do NOT pretend this is hybrid: trust hard rules 100%.
+  if (!hasLiveLlm) {
+    return {
+      final_score: Math.max(0, Math.min(100, Math.round(hardScore))),
+      llm: llmAnalysis,
+      weights: { hard: 1, llm: 0 },
+      hybrid_active: false
+    };
+  }
+
+  const blended =
+    (hardScore * HARD_WEIGHT) +
+    (Number(llmAnalysis.ai_score) * LLM_WEIGHT);
+
+  let hybridScore = Math.round(blended);
+
+  // Critical override: strong hard-rule certainty should stay high.
+  if (hardRulesResult.scam_score > 80 && hybridScore < 70) {
+    hybridScore = Math.max(hybridScore, 85);
+  }
+
+  return {
+    final_score: Math.max(0, Math.min(100, hybridScore)),
+    llm: llmAnalysis,
+    weights: { hard: HARD_WEIGHT, llm: LLM_WEIGHT },
+    hybrid_active: true
+  };
 }
 
 // Pull company slug from recruiter email domain (skips free providers)
@@ -170,6 +456,23 @@ async function checkLinkedInCompany(slug) {
   }
 }
 
+function buildLinkedInSlugCandidates({ companyName, website, email }) {
+  const fromName = companySlugFromName(companyName);
+  const fromSite = companySlugFromWebsite(website);
+  const fromEmail = companySlugFromEmail(email);
+
+  const candidates = uniqueNonEmpty([
+    fromName,
+    fromSite,
+    fromEmail,
+    fromName ? fromName.replace(/-/g, "") : null,
+    fromSite ? fromSite.replace(/-/g, "") : null,
+    fromEmail ? fromEmail.replace(/-/g, "") : null
+  ]);
+
+  return candidates;
+}
+
 // Simulated AI detection for demo (pattern-based, no API required)
 function fakeAIDetection(text) {
   const msg = String(text || "").toLowerCase();
@@ -203,9 +506,14 @@ function fakeAIDetection(text) {
 // ─── Main Detection Function ──────────────────────────────────────────────────
 
 async function detectScam({ message, email, website, companyName }) {
+  const metadata = extractMetadataFromText(message);
+
+  const effectiveEmail = String(email || metadata.emails[0] || "").trim();
+  const effectiveWebsite = String(website || metadata.urls[0] || "").trim();
+
   const normMsg  = normalizeText(message);
-  const normEmail = normalizeText(email);
-  const normSite  = String(website || "").trim();
+  const normEmail = normalizeText(effectiveEmail);
+  const normSite  = effectiveWebsite;
 
   let riskScore = 0;
   const reasons = [];
@@ -213,6 +521,7 @@ async function detectScam({ message, email, website, companyName }) {
   let domainStatus = "not_checked";
   let domainAgeDays = null;
   let domainCreatedDate = null;
+  const greenFlags = [];
 
   // 1. Payment keyword + regex pattern (+40)
   const matchedKw = paymentKeywords.filter((k) => normMsg.includes(k));
@@ -238,11 +547,26 @@ async function detectScam({ message, email, website, companyName }) {
     );
   }
 
+  // 1b. Explicit pay-to-play traps (+25)
+  const hasPaymentTrap = additionalPaymentTrapPatterns.some((p) => p.test(message || ""));
+  if (hasPaymentTrap) {
+    riskScore += 25;
+    reasons.push("Pay-to-play trap detected (deposit / documentation / training payment)");
+  }
+
   // 2. Suspicious recruitment channels (+30)
   const matchedCh = suspiciousChannels.filter((c) => normMsg.includes(c));
   if (matchedCh.length > 0) {
     riskScore += 30;
     reasons.push(`Recruitment via suspicious channel: ${matchedCh.slice(0, 2).join(", ")}`);
+  }
+
+  // 4b. Interviews only on chat apps (+20)
+  const hasChatOnlyInterview = /(interview|selection|test)[\s\S]{0,50}(whatsapp|telegram|signal)/i.test(message || "");
+  const hasProfessionalMeetingLink = /(zoom\.us|meet\.google\.com|teams\.microsoft\.com|webex)/i.test(message || "");
+  if (hasChatOnlyInterview && !hasProfessionalMeetingLink) {
+    riskScore += 20;
+    reasons.push("Interview flow appears chat-app only (no professional video-call invite found)");
   }
 
   // 3. Urgency / high-pressure language (+20)
@@ -279,6 +603,12 @@ async function detectScam({ message, email, website, companyName }) {
     reasons.push("Unusual offer pattern detected (verify interview process and payroll details)");
   }
 
+  // 5b. Too-fast selection velocity (+20)
+  if (fastSelectionPatterns.some((p) => p.test(message || ""))) {
+    riskScore += 20;
+    reasons.push("Selection velocity is suspiciously fast (direct/instant offer language)");
+  }
+
   // 4. Free / personal email domain (+25)
   const emailDomain = normEmail.includes("@") ? normEmail.split("@")[1] : "";
   if (emailDomain && freeEmailDomains.includes(emailDomain)) {
@@ -286,15 +616,35 @@ async function detectScam({ message, email, website, companyName }) {
     reasons.push(`Recruiter using free email service: ${emailDomain}`);
   }
 
+  // 2b. Display-name trickery: big brand/company name + public email provider (+20)
+  const normalizedCompanyName = String(companyName || "").toLowerCase();
+  const emailLocalPart = normEmail.includes("@") ? normEmail.split("@")[0] : "";
+  const hasBrandLikeName = displayNameBrandHints.some((b) => normalizedCompanyName.includes(b) || normMsg.includes(`${b} hr`));
+  const localPartLooksCorporate = normalizedCompanyName
+    ? normalizedCompanyName.split(/\s+/).some((token) => token.length > 2 && emailLocalPart.includes(token))
+    : false;
+
+  if (emailDomain && freeEmailDomains.includes(emailDomain) && (hasBrandLikeName || localPartLooksCorporate)) {
+    riskScore += 20;
+    reasons.push("Display-name mismatch risk: corporate-looking recruiter identity on public email domain");
+  }
+
+  // Green signal: corporate email domain present
+  if (emailDomain && !freeEmailDomains.includes(emailDomain)) {
+    greenFlags.push({ points: 5, reason: `Corporate recruiter email domain detected (${emailDomain})` });
+  }
+
   // 5–7: Run external I/O checks concurrently to keep latency low
-  const domain = normSite ? extractDomain(normSite) : null;
-  const linkedInCandidates = Array.from(
-    new Set([
-      companySlugFromEmail(email),
-      companySlugFromWebsite(normSite),
-      companySlugFromName(companyName)
-    ].filter(Boolean))
-  );
+  const corporateEmailDomain =
+    emailDomain && !freeEmailDomains.includes(emailDomain) ? emailDomain : null;
+
+  // Prefer website domain; if absent use corporate recruiter email domain.
+  const domain = normSite ? extractDomain(normSite) : corporateEmailDomain;
+  const linkedInCandidates = buildLinkedInSlugCandidates({
+    companyName,
+    website: normSite,
+    email: effectiveEmail
+  });
 
   const [websiteExists, domainCreated, linkedInChecks] = await Promise.all([
     normSite ? checkWebsiteExists(normSite)            : Promise.resolve(null),
@@ -309,6 +659,8 @@ async function detectScam({ message, email, website, companyName }) {
     if (websiteExists === false) {
       riskScore += 35;
       reasons.push("Company website is unreachable or does not exist");
+    } else if (websiteExists === true) {
+      greenFlags.push({ points: 5, reason: "Company website is reachable" });
     }
     // website exists — still check domain age below
   }
@@ -319,15 +671,37 @@ async function detectScam({ message, email, website, companyName }) {
     const ageDays = domainAgeInDays(domainCreated);
     domainAgeDays = ageDays !== null ? Math.round(ageDays) : null;
 
-    if (ageDays !== null && ageDays < 30) {
+    if (ageDays !== null && ageDays < 60) {
       domainStatus = "new";
       riskScore += 40;
       reasons.push(`Domain is very new — only ${Math.round(ageDays)} day(s) old`);
+    } else if (ageDays !== null && ageDays < 180) {
+      domainStatus = "young";
+      riskScore += 15;
+      reasons.push(`Domain is relatively new — ${Math.round(ageDays)} day(s) old`);
     } else if (ageDays === null) {
       domainStatus = "unknown";
-      reasons.push("Domain age could not be verified (WHOIS unavailable)");
     } else {
       domainStatus = "established";
+      greenFlags.push({ points: 8, reason: "Established domain age" });
+    }
+
+    // 1c. Suspicious domain shape / extension (+20)
+    if (looksLikeSuspiciousDomain(domain)) {
+      riskScore += 20;
+      reasons.push(`Domain pattern looks suspicious: ${domain}`);
+    }
+
+    // 1d. Website domain and recruiter email domain mismatch (+15)
+    if (normSite && corporateEmailDomain) {
+      const siteRoot = getRootDomain(extractDomain(normSite));
+      const emailRoot = getRootDomain(corporateEmailDomain);
+      if (siteRoot && emailRoot && siteRoot !== emailRoot) {
+        riskScore += 15;
+        reasons.push(`Recruiter email domain does not match website domain (${emailRoot} vs ${siteRoot})`);
+      } else if (siteRoot && emailRoot && siteRoot === emailRoot) {
+        greenFlags.push({ points: 6, reason: "Recruiter email domain matches company website" });
+      }
     }
   } else {
     domainStatus = "skipped";
@@ -340,6 +714,40 @@ async function detectScam({ message, email, website, companyName }) {
     reasons.push("Message matches common AI/template patterns");
   }
 
+  // 8. Document authenticity / template quality (+12)
+  if (genericSalutations.some((p) => p.test(message || ""))) {
+    riskScore += 12;
+    reasons.push("Generic salutation detected (e.g., 'Dear Candidate')");
+  }
+
+  // 7. Salary-to-market disparity (+25)
+  const monthlyInr = extractMonthlyCompensationInInr(message || "");
+  const roleText = `${normalizedCompanyName} ${normMsg}`;
+  const lowComplexityRole = /(data\s*entry|form\s*filling|captcha|typing|back\s*office|virtual\s*assistant)/i.test(roleText);
+  const internshipRole = /intern(ship)?/i.test(roleText);
+
+  if (monthlyInr !== null) {
+    if (lowComplexityRole && monthlyInr >= 100000) {
+      riskScore += 25;
+      reasons.push("Salary-to-role mismatch: unusually high monthly pay for low-complexity role");
+    } else if (internshipRole && monthlyInr >= 80000) {
+      riskScore += 20;
+      reasons.push("Internship stipend appears unusually high; verify offer authenticity");
+    }
+  }
+
+  if (/free\s*international\s*trip|all\s*expense\s*paid\s*trip/i.test(message || "")) {
+    riskScore += 15;
+    reasons.push("Unrealistic perks detected (e.g., international trip promises)");
+  }
+
+  // 10. Sensitive personal data requests before interview (+35)
+  const hasSensitivePreHiringRequest = sensitivePreHiringPatterns.some((p) => p.test(message || ""));
+  if (hasSensitivePreHiringRequest && (hasNoInterview || hasImmediateJoining || !hasProfessionalMeetingLink)) {
+    riskScore += 35;
+    reasons.push("Sensitive personal/financial data requested before a formal interview process");
+  }
+
   // 8. LinkedIn company verification (+35)
   if (linkedInCandidates.length > 0) {
     const hasLinkedInPage = linkedInChecks.some((v) => v === true);
@@ -348,10 +756,12 @@ async function detectScam({ message, email, website, companyName }) {
 
     if (hasLinkedInPage) {
       linkedInStatus = "verified";
+      greenFlags.push({ points: 7, reason: "LinkedIn company footprint verified" });
     } else if (!hasLinkedInPage && allNotFound) {
       linkedInStatus = "not_found";
       riskScore += 35;
       reasons.push(`No LinkedIn company page found for "${linkedInCandidates[0]}"`);
+      reasons.push("Manual check advised: verify recruiter profile on LinkedIn and check company reviews on Glassdoor");
     } else if (!hasLinkedInPage && hasUnknown) {
       linkedInStatus = "unknown";
       reasons.push("LinkedIn verification skipped (network timeout)");
@@ -360,19 +770,74 @@ async function detectScam({ message, email, website, companyName }) {
     linkedInStatus = "skipped";
   }
 
+  // Green signal: professional process clues and no payment demand
+  if (hasProfessionalMeetingLink && !hasChatOnlyInterview) {
+    greenFlags.push({ points: 6, reason: "Professional interview channel detected (Teams/Zoom/Meet/Webex)" });
+  }
+  if (!hasPaymentTrap && !hasPayPat && matchedKw.length === 0) {
+    greenFlags.push({ points: 6, reason: "No upfront-payment signal detected" });
+  }
+
   riskScore = Math.min(riskScore, 100);
-  const risk = riskScore > 70 ? "High" : riskScore > 30 ? "Medium" : "Low";
+
+  const greenBonusRaw = greenFlags.reduce((sum, g) => sum + Number(g.points || 0), 0);
+  const hasCriticalPaymentSignal = hasPaymentTrap || hasPayPat || matchedKw.length > 0 || hasActionablePayDemand;
+  const hasCriticalSensitiveDataSignal = hasSensitivePreHiringRequest && (hasNoInterview || hasImmediateJoining || !hasProfessionalMeetingLink);
+
+  // Allow stronger neutralization for truly clean offers, but be strict when money/sensitive-data red flags exist.
+  const greenCap = hasCriticalPaymentSignal || hasCriticalSensitiveDataSignal ? 20 : 50;
+  const greenBonus = Math.min(greenCap, Math.max(0, greenBonusRaw));
+
+  let hardRulesScore = Math.max(0, Math.min(100, Math.round(riskScore - greenBonus)));
+
+  // Non-negotiable floor: payment-demand scams should remain high despite green signals.
+  if (hasCriticalPaymentSignal) {
+    hardRulesScore = Math.max(hardRulesScore, 60);
+  }
+  if (hasCriticalSensitiveDataSignal) {
+    hardRulesScore = Math.max(hardRulesScore, 75);
+  }
+
+  const hybrid = await getHybridScore(message, { scam_score: hardRulesScore });
+  const finalScore = hybrid.final_score;
+
+  // New scoring bands requested by product direction.
+  const riskBand = finalScore <= 30 ? "Safe" : finalScore <= 60 ? "Suspicious" : "SCAM";
+
+  // Backward compatibility for existing frontend styling.
+  const risk = finalScore > 70 ? "High" : finalScore > 30 ? "Medium" : "Low";
+
+  const bandVerdict =
+    riskBand === "SCAM"
+      ? "High Risk"
+      : riskBand === "Suspicious"
+      ? "Suspicious"
+      : "Safe";
 
   return {
     risk,
-    score: riskScore,
+    risk_band: riskBand,
+    verdict: bandVerdict,
+    scam_score: finalScore,
+    hard_rules_score: hardRulesScore,
+    llm_score: hybrid.llm.ai_score,
+    llm_reason: hybrid.llm.reason,
+    llm_markers: Array.isArray(hybrid.llm.markers) ? hybrid.llm.markers : [],
+    llm_source: hybrid.llm.source,
+    hybrid_active: Boolean(hybrid.hybrid_active),
+    weights: hybrid.weights,
+    green_bonus: greenBonus,
+    green_flags: greenFlags,
+    red_flags: reasons,
+    score: finalScore,
     reasons,
     linkedin_status: linkedInStatus,
     domain_status: domainStatus,
     domain_age_days: domainAgeDays,
     domain_created_date: domainCreatedDate,
-    domain_checked: domain || null
+    domain_checked: domain || null,
+    metadata
   };
 }
 
-module.exports = { detectScam };
+module.exports = { detectScam, callGeminiAnalysis };

@@ -34,10 +34,24 @@ router.post('/', async (req, res) => {
             domain_checked: detection.domain_checked || null,
             domain_age_days: Number.isFinite(detection.domain_age_days) ? detection.domain_age_days : null,
             domain_created_date: detection.domain_created_date || null,
+            // New structured scoring model
+            scam_score: Number.isFinite(detection.scam_score) ? detection.scam_score : detection.score,
+            hard_rules_score: Number.isFinite(detection.hard_rules_score) ? detection.hard_rules_score : null,
+            llm_score: Number.isFinite(detection.llm_score) ? detection.llm_score : null,
+            llm_reason: detection.llm_reason || null,
+            llm_markers: Array.isArray(detection.llm_markers) ? detection.llm_markers : [],
+            llm_source: detection.llm_source || null,
+            hybrid_active: Boolean(detection.hybrid_active),
+            weights: detection.weights || { hard: 0.7, llm: 0.3 },
+            green_bonus: Number.isFinite(detection.green_bonus) ? detection.green_bonus : 0,
+            green_flags: Array.isArray(detection.green_flags) ? detection.green_flags : [],
+            risk_band: detection.risk_band || (detection.score > 60 ? 'SCAM' : detection.score > 30 ? 'Suspicious' : 'Safe'),
+            red_flags: Array.isArray(detection.red_flags) ? detection.red_flags : (Array.isArray(detection.reasons) ? detection.reasons : []),
+            metadata: detection.metadata || null,
             risk_level: detection.risk,
             score: detection.score,
             reasons: Array.isArray(detection.reasons) ? detection.reasons : [],
-            verdict
+            verdict: detection.verdict || verdict
         };
 
         // Backward compatibility for existing frontend bindings.

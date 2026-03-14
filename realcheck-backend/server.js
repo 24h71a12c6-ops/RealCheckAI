@@ -5,6 +5,7 @@ const axios = require('axios');
 const cors = require('cors');
 const path = require('path');
 const analyzeJobRoute = require('./routes/analyzeJob');
+const { callGeminiAnalysis } = require('./services/scamDetector');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -75,6 +76,53 @@ app.post('/api/gemini-analyze', async (req, res) => {
         const status = error.response?.status || 500;
         const message = error.response?.data?.error?.message || error.message || 'Gemini request failed.';
         return res.status(status).json({ error: message });
+    }
+});
+
+app.get('/api/health/llm', async (req, res) => {
+    const dummyScamText = [
+        'Dear Candidate,',
+        'You are directly selected for the role.',
+        'Offer expires in 4 hours.',
+        'Interview will happen on WhatsApp only.',
+        'Pay processing fee Rs. 1500 before onboarding.'
+    ].join(' ');
+
+    try {
+        const result = await callGeminiAnalysis(dummyScamText);
+        const numericScore = Number(result?.ai_score);
+        const schemaOk = Number.isFinite(numericScore);
+
+        if (!schemaOk) {
+            return res.status(503).json({
+                ok: false,
+                provider: 'gemini',
+                hybrid_ready: false,
+                reason: result?.reason || 'Gemini did not return a numeric ai_score.',
+                llm_source: result?.source || 'unknown',
+                schema_ok: false,
+                probe_result: result
+            });
+        }
+
+        return res.json({
+            ok: true,
+            provider: 'gemini',
+            hybrid_ready: true,
+            schema_ok: true,
+            llm_source: result.source,
+            ai_score: numericScore,
+            markers: Array.isArray(result.markers) ? result.markers : [],
+            reason: result.reason || 'LLM health probe passed.'
+        });
+    } catch (error) {
+        return res.status(503).json({
+            ok: false,
+            provider: 'gemini',
+            hybrid_ready: false,
+            schema_ok: false,
+            error: error.message || 'LLM health probe failed.'
+        });
     }
 });
 

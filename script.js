@@ -36,52 +36,103 @@ window.runAnalysis = async function runAnalysis() {
         return;
     }
 
-    const scamSignals = [
-        'registration fee', 'security deposit', 'batch code',
-        'whatsapp to', 'telegram', 'processing fee',
-        'training fee', 'pay to'
-    ];
-
-    let score = 0;
-    const detected = [];
-
-    scamSignals.forEach(signal => {
-        if (finalContent.toLowerCase().includes(signal)) {
-            score += 25;
-            detected.push(signal);
-        }
-    });
-
-    const clampedScore = Math.min(score, 100);
-    resultDiv.style.display = 'block';
-
     const badge = document.getElementById('riskBadge');
     const verdict = document.getElementById('verdictText');
     const scoreText = document.getElementById('riskScore');
 
-    if (scoreText) scoreText.innerText = String(clampedScore);
+    const setBadgeUi = (riskLevel) => {
+        const normalized = String(riskLevel || '').toLowerCase();
+        if (!badge) return;
 
-    if (badge && verdict) {
-        if (clampedScore >= 50) {
+        if (normalized === 'high') {
             badge.innerText = '⚠ HIGH RISK';
             badge.style.background = '#fee2e2';
             badge.style.color = '#dc2626';
-            verdict.innerText = `Suspicious signals found: ${detected.join(', ')}. Be careful!`;
-        } else if (clampedScore > 0) {
+        } else if (normalized === 'medium') {
             badge.innerText = '🟡 MEDIUM RISK';
             badge.style.background = '#ffedd5';
             badge.style.color = '#ea580c';
-            verdict.innerText = `Some common keywords detected (${detected.join(', ')}). Verify before proceeding.`;
         } else {
             badge.innerText = '✅ LOW RISK';
             badge.style.background = '#dcfce7';
             badge.style.color = '#16a34a';
-            verdict.innerText = "No obvious scam signals detected. Always verify the company's official domain.";
         }
-    }
+    };
 
-    btn.innerText = original;
-    btn.disabled = false;
+    const runLocalFallback = () => {
+        const scamSignals = [
+            'registration fee', 'security deposit', 'batch code',
+            'whatsapp to', 'telegram', 'processing fee',
+            'training fee', 'pay to', 'guaranteed job', 'pay before interview'
+        ];
+
+        let score = 0;
+        const detected = [];
+
+        scamSignals.forEach(signal => {
+            if (finalContent.toLowerCase().includes(signal)) {
+                score += 20;
+                detected.push(signal);
+            }
+        });
+
+        const fallbackScore = Math.min(score, 100);
+        if (scoreText) scoreText.innerText = String(fallbackScore);
+
+        const fallbackRisk = fallbackScore >= 70 ? 'High' : fallbackScore >= 35 ? 'Medium' : 'Low';
+        setBadgeUi(fallbackRisk);
+
+        if (verdict) {
+            if (fallbackRisk === 'High') {
+                verdict.innerText = `High-risk signals found: ${detected.slice(0, 5).join(', ')}. Do not share money or personal documents until verified.`;
+            } else if (fallbackRisk === 'Medium') {
+                verdict.innerText = `Some suspicious patterns found (${detected.slice(0, 5).join(', ')}). Verify recruiter identity, domain, and interview process.`;
+            } else {
+                verdict.innerText = "No strong local scam signal found. For deeper checks, ensure backend is running to verify domain age and LinkedIn/company presence.";
+            }
+        }
+    };
+
+    try {
+        const response = await fetch('/api/analyze-job', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rawText: finalContent })
+        });
+
+        if (!response.ok) {
+            throw new Error(`Analysis API failed (${response.status})`);
+        }
+
+        const data = await response.json();
+        const riskLevel = data.risk_level || data.risk || 'Low';
+        const score = Number.isFinite(data.score) ? data.score : 0;
+        const reasons = Array.isArray(data.reasons) ? data.reasons : [];
+
+        if (scoreText) scoreText.innerText = String(score);
+        setBadgeUi(riskLevel);
+
+        const domainLine = data.domain_age_days !== null && data.domain_age_days !== undefined
+            ? `Domain age: ${data.domain_age_days} day(s)`
+            : `Domain age: ${data.domain_status || 'not checked'}`;
+
+        const linkedInLine = `LinkedIn/company check: ${String(data.linkedin_status || 'not_checked').replace(/_/g, ' ')}`;
+
+        const topReasons = reasons.length > 0
+            ? `\nSignals: ${reasons.slice(0, 4).join(' | ')}`
+            : '';
+
+        if (verdict) {
+            verdict.innerText = `${data.verdict || 'Analysis complete.'}\n${domainLine}\n${linkedInLine}${topReasons}`;
+        }
+    } catch (error) {
+        console.warn('Instant analyzer backend call failed:', error.message);
+        runLocalFallback();
+    } finally {
+        resultDiv.style.display = 'block';
+        btn.innerText = original;
+        btn.disabled = false;
+    }
 };
 
 let firebaseAuth = null;
