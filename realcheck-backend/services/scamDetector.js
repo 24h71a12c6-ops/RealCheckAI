@@ -87,6 +87,16 @@ const additionalPaymentTrapPatterns = [
   /pay\s*before\s*(joining|training|internship|onboarding)/i
 ];
 
+const hardPaymentOverrideTerms = [
+  "upi",
+  "phonepe",
+  "google pay",
+  "gpay",
+  "paytm",
+  "registration fee",
+  "training fee"
+];
+
 const fastSelectionPatterns = [
   /selected\s*within\s*\d+\s*(minutes?|hours?)/i,
   /offer\s*letter\s*in\s*\d+\s*(minutes?|hours?)/i,
@@ -141,6 +151,59 @@ function getRootDomain(domain) {
   const parts = d.split(".").filter(Boolean);
   if (parts.length < 2) return d;
   return `${parts[parts.length - 2]}.${parts[parts.length - 1]}`;
+}
+
+function extractEmailDomain(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return "";
+
+  if (raw.includes("@")) {
+    return raw.split("@")[1] || "";
+  }
+
+  return raw
+    .replace(/^careers?\.?/i, "")
+    .replace(/^hr\.?/i, "")
+    .replace(/^www\./i, "")
+    .split("/")[0]
+    .split("?")[0]
+    .trim();
+}
+
+function verifyIdentity(emailDomain, linkedInProfileUrl, companyWebsite) {
+  let identityScore = 0;
+  let isVerified = false;
+
+  const officialDomainRaw = extractDomain(companyWebsite);
+  const userEmailDomainRaw = extractEmailDomain(emailDomain);
+  const officialDomain = getRootDomain(officialDomainRaw);
+  const userEmailDomain = getRootDomain(userEmailDomainRaw);
+
+  if (!officialDomain || !userEmailDomain) {
+    return {
+      identityScore,
+      isVerified,
+      officialDomain,
+      userEmailDomain,
+      linkedInProfileUrl: linkedInProfileUrl || null
+    };
+  }
+
+  if (userEmailDomain === officialDomain) {
+    identityScore += 40;
+    isVerified = true;
+  } else {
+    identityScore -= 50;
+    isVerified = false;
+  }
+
+  return {
+    identityScore,
+    isVerified,
+    officialDomain,
+    userEmailDomain,
+    linkedInProfileUrl: linkedInProfileUrl || null
+  };
 }
 
 function extractMetadataFromText(text) {
@@ -252,14 +315,16 @@ async function callGeminiAnalysis(userInput) {
   }
 
   const systemInstruction = `
-Analyze the provided job recruitment text as a forensic linguist.
-Ignore company reputation. Focus ONLY on:
-1. Linguistic Manipulation (Urgency, FOMO, "Vague" tasks).
-2. Structural Anomalies (Personal email for MNC roles).
-3. Call-to-action (Asking for money/sensitive data).
+You are a Forensic Recruitment Analyst. Analyze the job offer text for Psychological Manipulation and Logic Inconsistencies.
 
-Output ONLY valid JSON:
-{"ai_score": <0-100>, "reason": "<one_sentence_logic>", "markers": []}
+Instructions:
+1) Look for False Urgency (for example 24-hour deadlines, last chance language, immediate payment pressure).
+2) Flag Pay-to-Play models (training fees, documentation charges, registration deposits, wallet transfers).
+3) Identify Too-Good-To-Be-True compensation vs No-Interview shortcuts.
+4) CRITICAL: If the text mentions a famous company but asks for payment via UPI/PhonePe/Google Pay, set RiskScore to 100 immediately.
+
+Output ONLY valid JSON with this exact structure:
+{"RiskScore": <0-100>, "RedFlags": ["..."], "Reasoning": "<one concise forensic summary>"}
 `;
 
   const preferredModel = process.env.GEMINI_MODEL;
@@ -278,14 +343,14 @@ Output ONLY valid JSON:
             responseSchema: {
               type: "OBJECT",
               properties: {
-                ai_score: { type: "NUMBER" },
-                reason: { type: "STRING" },
-                markers: {
+                RiskScore: { type: "NUMBER" },
+                Reasoning: { type: "STRING" },
+                RedFlags: {
                   type: "ARRAY",
                   items: { type: "STRING" }
                 }
               },
-              required: ["ai_score", "reason", "markers"]
+              required: ["RiskScore", "Reasoning", "RedFlags"]
             }
           },
           contents: [
@@ -307,13 +372,15 @@ Output ONLY valid JSON:
       const raw = response?.data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
       const parsed = parseJsonObjectSafe(raw) || {};
 
-      const score = Number(parsed.ai_score);
+      const score = Number(parsed.RiskScore ?? parsed.ai_score);
       const aiScore = Number.isFinite(score) ? Math.max(0, Math.min(100, Math.round(score))) : null;
 
       return {
         ai_score: aiScore,
-        reason: String(parsed.reason || "Contextual manipulation assessment complete."),
-        markers: Array.isArray(parsed.markers) ? parsed.markers.map((m) => String(m)) : [],
+        reason: String(parsed.Reasoning || parsed.reason || "Contextual manipulation assessment complete."),
+        markers: Array.isArray(parsed.RedFlags)
+          ? parsed.RedFlags.map((m) => String(m))
+          : (Array.isArray(parsed.markers) ? parsed.markers.map((m) => String(m)) : []),
         source: `gemini:${model}`
       };
     } catch (error) {
@@ -530,6 +597,8 @@ async function detectScam({ message, email, website, companyName }) {
   const hasCompensationContext = compensationSafePatterns.some((p) => p.test(normMsg));
   const hasActionablePayDemand = /\b(pay|payment|send|transfer|deposit)\b[\s\S]{0,30}\b(confirm|registration|fee|deposit|processing|assessment|application|verification|booking)\b/i.test(normMsg);
   const hasStrongFraudTerms = strongFraudPaymentTerms.test(normMsg) || matchedKw.length > 0;
+  const hasHardPaymentOverride = hardPaymentOverrideTerms.some((term) => normMsg.includes(term));
+  const hasDigitalWalletRequest = /(upi|phonepe|google\s*pay|gpay|paytm)/i.test(normMsg);
 
   // Avoid false positives for normal stipend/salary mentions.
   const compensationOnlyAmount =
@@ -552,6 +621,11 @@ async function detectScam({ message, email, website, companyName }) {
   if (hasPaymentTrap) {
     riskScore += 25;
     reasons.push("Pay-to-play trap detected (deposit / documentation / training payment)");
+  }
+
+  if (hasHardPaymentOverride) {
+    riskScore += 35;
+    reasons.push("Critical payment-channel signal detected (UPI/PhonePe/Google Pay/fee request)");
   }
 
   // 2. Suspicious recruitment channels (+30)
@@ -620,6 +694,7 @@ async function detectScam({ message, email, website, companyName }) {
   const normalizedCompanyName = String(companyName || "").toLowerCase();
   const emailLocalPart = normEmail.includes("@") ? normEmail.split("@")[0] : "";
   const hasBrandLikeName = displayNameBrandHints.some((b) => normalizedCompanyName.includes(b) || normMsg.includes(`${b} hr`));
+  const hasBrandNameMention = displayNameBrandHints.some((b) => normalizedCompanyName.includes(b) || normMsg.includes(b));
   const localPartLooksCorporate = normalizedCompanyName
     ? normalizedCompanyName.split(/\s+/).some((token) => token.length > 2 && emailLocalPart.includes(token))
     : false;
@@ -681,6 +756,8 @@ async function detectScam({ message, email, website, companyName }) {
       reasons.push(`Domain is relatively new — ${Math.round(ageDays)} day(s) old`);
     } else if (ageDays === null) {
       domainStatus = "unknown";
+      riskScore += 30;
+      reasons.push("Domain intelligence unavailable (WHOIS unknown) — treating as risk by default");
     } else {
       domainStatus = "established";
       greenFlags.push({ points: 8, reason: "Established domain age" });
@@ -748,15 +825,40 @@ async function detectScam({ message, email, website, companyName }) {
     reasons.push("Sensitive personal/financial data requested before a formal interview process");
   }
 
-  // 8. LinkedIn company verification (+35)
+  // Critical forensic override: famous brand + wallet/payment ask = immediate max risk
+  const criticalBrandPaymentFraud = hasBrandNameMention && hasDigitalWalletRequest;
+  if (criticalBrandPaymentFraud) {
+    riskScore = 100;
+    reasons.push("CRITICAL: Famous company claim combined with UPI/PhonePe/Google Pay payment request");
+  }
+
+  // 8. Strict identity cross-referencing (email domain vs official domain)
+  const identity = verifyIdentity(
+    corporateEmailDomain || emailDomain,
+    linkedInCandidates[0] ? `https://www.linkedin.com/company/${linkedInCandidates[0]}/` : "",
+    normSite || domain || ""
+  );
+
+  if (identity.identityScore < 0) {
+    riskScore += Math.abs(identity.identityScore);
+    reasons.push(`Brand-hijack risk: recruiter email domain does not match official domain (${identity.userEmailDomain || "unknown"} vs ${identity.officialDomain || "unknown"})`);
+  } else if (identity.isVerified) {
+    greenFlags.push({ points: 8, reason: "Strict identity cross-check passed (email domain matches official domain)" });
+  }
+
+  // 9. LinkedIn company verification (+35)
   if (linkedInCandidates.length > 0) {
     const hasLinkedInPage = linkedInChecks.some((v) => v === true);
     const allNotFound = linkedInChecks.length > 0 && linkedInChecks.every((v) => v === false);
     const hasUnknown = linkedInChecks.some((v) => v === null);
 
-    if (hasLinkedInPage) {
+    if (hasLinkedInPage && identity.isVerified) {
       linkedInStatus = "verified";
       greenFlags.push({ points: 7, reason: "LinkedIn company footprint verified" });
+    } else if (hasLinkedInPage && !identity.isVerified) {
+      linkedInStatus = "brand_hijack";
+      riskScore += 25;
+      reasons.push("LinkedIn company found, but recruiter domain mismatch blocks verification");
     } else if (!hasLinkedInPage && allNotFound) {
       linkedInStatus = "not_found";
       riskScore += 35;
@@ -783,9 +885,10 @@ async function detectScam({ message, email, website, companyName }) {
   const greenBonusRaw = greenFlags.reduce((sum, g) => sum + Number(g.points || 0), 0);
   const hasCriticalPaymentSignal = hasPaymentTrap || hasPayPat || matchedKw.length > 0 || hasActionablePayDemand;
   const hasCriticalSensitiveDataSignal = hasSensitivePreHiringRequest && (hasNoInterview || hasImmediateJoining || !hasProfessionalMeetingLink);
+  const hardOverrideActive = hasHardPaymentOverride || criticalBrandPaymentFraud;
 
   // Allow stronger neutralization for truly clean offers, but be strict when money/sensitive-data red flags exist.
-  const greenCap = hasCriticalPaymentSignal || hasCriticalSensitiveDataSignal ? 20 : 50;
+  const greenCap = hardOverrideActive ? 0 : (hasCriticalPaymentSignal || hasCriticalSensitiveDataSignal ? 20 : 50);
   const greenBonus = Math.min(greenCap, Math.max(0, greenBonusRaw));
 
   let hardRulesScore = Math.max(0, Math.min(100, Math.round(riskScore - greenBonus)));
@@ -796,6 +899,12 @@ async function detectScam({ message, email, website, companyName }) {
   }
   if (hasCriticalSensitiveDataSignal) {
     hardRulesScore = Math.max(hardRulesScore, 75);
+  }
+  if (hardOverrideActive) {
+    hardRulesScore = Math.max(hardRulesScore, 95);
+  }
+  if (criticalBrandPaymentFraud) {
+    hardRulesScore = 100;
   }
 
   const hybrid = await getHybridScore(message, { scam_score: hardRulesScore });
@@ -832,6 +941,8 @@ async function detectScam({ message, email, website, companyName }) {
     score: finalScore,
     reasons,
     linkedin_status: linkedInStatus,
+    identity_verified: Boolean(identity.isVerified),
+    identity_score: identity.identityScore,
     domain_status: domainStatus,
     domain_age_days: domainAgeDays,
     domain_created_date: domainCreatedDate,

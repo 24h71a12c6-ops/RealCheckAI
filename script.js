@@ -56,14 +56,28 @@ window.runAnalysis = async function runAnalysis() {
                 return;
             }
 
+            if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+                const text = String(entry.text || '').trim();
+                if (text) {
+                    bucket.push({ text, tone: String(entry.tone || '').toLowerCase() });
+                }
+                return;
+            }
+
             String(entry || '')
                 .split(/\n|\|/g)
                 .map((line) => line.trim())
                 .filter(Boolean)
-                .forEach((line) => bucket.push(line));
+                .forEach((line) => bucket.push({ text: line, tone: '' }));
         });
 
-        return [...new Set(bucket)];
+        const seen = new Set();
+        return bucket.filter((item) => {
+            const key = String(item.text || '').toLowerCase();
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
     };
 
     const renderVerdict = (summaryText, signalParts) => {
@@ -77,7 +91,7 @@ window.runAnalysis = async function runAnalysis() {
             return;
         }
 
-        verdict.innerHTML = `${summary}<ul class="result-list">${signals.map((signal) => `<li>${escapeHtmlSimple(signal)}</li>`).join('')}</ul>`;
+        verdict.innerHTML = `${summary}<ul class="result-list">${signals.map((signal) => `<li class="${signal.tone === 'warning' ? 'warning' : signal.tone === 'danger' ? 'danger' : ''}">${escapeHtmlSimple(signal.text)}</li>`).join('')}</ul>`;
     };
 
     const setBadgeUi = (riskLevel) => {
@@ -153,12 +167,17 @@ window.runAnalysis = async function runAnalysis() {
         if (scoreText) scoreText.innerText = String(score);
         setBadgeUi(riskLevel);
 
-        const domainLine = data.domain_age_days !== null && data.domain_age_days !== undefined
+        const domainStatusRaw = String(data.domain_status || 'not checked').toLowerCase();
+        const hasKnownDomainAge = data.domain_age_days !== null && data.domain_age_days !== undefined;
+        const domainLine = hasKnownDomainAge
             ? `Domain age: ${data.domain_age_days} day(s)`
             : `Domain age: ${data.domain_status || 'not checked'}`;
+        const domainTone = hasKnownDomainAge
+            ? ''
+            : (domainStatusRaw.includes('unknown') || domainStatusRaw.includes('not') ? 'warning' : '');
 
         const linkedInLine = `LinkedIn/company check: ${String(data.linkedin_status || 'not_checked').replace(/_/g, ' ')}`;
-        renderVerdict(data.verdict || 'Analysis complete.', [domainLine, linkedInLine, reasons.slice(0, 6)]);
+        renderVerdict(data.verdict || 'Analysis complete.', [{ text: domainLine, tone: domainTone }, linkedInLine, reasons.slice(0, 6)]);
     } catch (error) {
         console.warn('Instant analyzer backend call failed:', error.message);
         runLocalFallback();

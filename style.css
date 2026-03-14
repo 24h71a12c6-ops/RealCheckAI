@@ -826,12 +826,30 @@ body.light .view-btn:hover {
   margin-bottom: 6px;
 }
 
+.result-list li.warning {
+  color: #c2410c;
+  font-weight: 700;
+}
+
+.result-list li.danger {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
 body.light .verdict-summary {
   color: #1f2b06;
 }
 
 body.light .result-list li {
   color: #2d3f08;
+}
+
+body.light .result-list li.warning {
+  color: #b45309;
+}
+
+body.light .result-list li.danger {
+  color: #b91c1c;
 }
 
 .reasons-box {
