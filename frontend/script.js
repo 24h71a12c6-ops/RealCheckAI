@@ -147,49 +147,66 @@ window.runAnalysis = async function runAnalysis() {
 
     const tryPythonPredictFallback = async () => {
         // Optional fallback: if Node backend is down, try the Python BERT+Rules microservice.
-        // Requires `bert-services/app.py` (or main.py) running on port 8000.
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 1600);
-        try {
-            const response = await fetch('http://127.0.0.1:8000/predict', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: finalContent }),
-                signal: controller.signal
-            });
+        // 1) Tries the deployed endpoint (Render) first.
+        // 2) Falls back to local dev server on port 8000.
+        const endpoints = [
+            'https://realcheckai.onrender.com/predict',
+            'http://127.0.0.1:8000/predict'
+        ];
 
-            if (!response.ok) return false;
-            const data = await response.json();
+        for (const url of endpoints) {
+            const controller = new AbortController();
+            const timeoutMs = url.startsWith('https://') ? 6500 : 1600; // Render can cold-start.
+            const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
-            const label = String(data.label || '').toUpperCase();
-            const report = Array.isArray(data.risk_report) ? data.risk_report : [];
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: finalContent }),
+                    signal: controller.signal
+                });
 
-            const scamProb = Number(data.scam_probability);
-            const score = Number.isFinite(scamProb)
-                ? Math.max(0, Math.min(100, Math.round(scamProb * 100)))
-                : (label === 'SCAM' ? 90 : 10);
+                if (!response.ok) {
+                    clearTimeout(timeout);
+                    continue;
+                }
 
-            if (scoreText) scoreText.innerText = String(score);
-            setBadgeUi(label === 'SCAM' ? 'High' : 'Low');
+                const data = await response.json();
 
-            if (label === 'SCAM') {
-                renderVerdict(
-                    'High-risk signals found (BERT + forensic rules). Do not send money or sensitive documents until independently verified.',
-                    report.length ? report : ['Scam probability is high.']
-                );
-            } else {
-                renderVerdict(
-                    'No strong scam indicators were detected by the local BERT + rules scan. Still verify the recruiter identity and domain before proceeding.',
-                    report
-                );
+                const label = String(data.label || '').toUpperCase();
+                const report = Array.isArray(data.risk_report) ? data.risk_report : [];
+
+                const scamProb = Number(data.scam_probability);
+                const score = Number.isFinite(scamProb)
+                    ? Math.max(0, Math.min(100, Math.round(scamProb * 100)))
+                    : (label === 'SCAM' ? 90 : 10);
+
+                if (scoreText) scoreText.innerText = String(score);
+                setBadgeUi(label === 'SCAM' ? 'High' : 'Low');
+
+                if (label === 'SCAM') {
+                    renderVerdict(
+                        'High-risk signals found (BERT + forensic rules). Do not send money or sensitive documents until independently verified.',
+                        report.length ? report : ['Scam probability is high.']
+                    );
+                } else {
+                    renderVerdict(
+                        'No strong scam indicators were detected by the BERT + rules scan. Still verify the recruiter identity and domain before proceeding.',
+                        report
+                    );
+                }
+
+                clearTimeout(timeout);
+                return true;
+            } catch (err) {
+                // Try next endpoint.
+            } finally {
+                clearTimeout(timeout);
             }
-
-            return true;
-        } catch (err) {
-            return false;
-        } finally {
-            clearTimeout(timeout);
         }
+
+        return false;
     };
 
     try {
