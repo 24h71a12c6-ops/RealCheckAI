@@ -145,6 +145,53 @@ window.runAnalysis = async function runAnalysis() {
         }
     };
 
+    const tryPythonPredictFallback = async () => {
+        // Optional fallback: if Node backend is down, try the Python BERT+Rules microservice.
+        // Requires `bert-services/app.py` (or main.py) running on port 8000.
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 1600);
+        try {
+            const response = await fetch('http://127.0.0.1:8000/predict', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: finalContent }),
+                signal: controller.signal
+            });
+
+            if (!response.ok) return false;
+            const data = await response.json();
+
+            const label = String(data.label || '').toUpperCase();
+            const report = Array.isArray(data.risk_report) ? data.risk_report : [];
+
+            const scamProb = Number(data.scam_probability);
+            const score = Number.isFinite(scamProb)
+                ? Math.max(0, Math.min(100, Math.round(scamProb * 100)))
+                : (label === 'SCAM' ? 90 : 10);
+
+            if (scoreText) scoreText.innerText = String(score);
+            setBadgeUi(label === 'SCAM' ? 'High' : 'Low');
+
+            if (label === 'SCAM') {
+                renderVerdict(
+                    'High-risk signals found (BERT + forensic rules). Do not send money or sensitive documents until independently verified.',
+                    report.length ? report : ['Scam probability is high.']
+                );
+            } else {
+                renderVerdict(
+                    'No strong scam indicators were detected by the local BERT + rules scan. Still verify the recruiter identity and domain before proceeding.',
+                    report
+                );
+            }
+
+            return true;
+        } catch (err) {
+            return false;
+        } finally {
+            clearTimeout(timeout);
+        }
+    };
+
     try {
         const response = await fetch('/api/analyze-job', {
             method: 'POST',
@@ -180,7 +227,10 @@ window.runAnalysis = async function runAnalysis() {
         renderVerdict(data.verdict || 'Analysis complete.', [{ text: domainLine, tone: domainTone }, linkedInLine, reasons.slice(0, 6)]);
     } catch (error) {
         console.warn('Instant analyzer backend call failed:', error.message);
-        runLocalFallback();
+        const didUsePythonFallback = await tryPythonPredictFallback();
+        if (!didUsePythonFallback) {
+            runLocalFallback();
+        }
     } finally {
         resultDiv.style.display = 'block';
         if (btn) btn.style.display = 'none';
@@ -1628,7 +1678,7 @@ document.addEventListener('DOMContentLoaded', () => {
             company: 'TechVision AI',
             location: 'Remote',
             description: 'Work on responsive UI components, reusable frontend modules, and collaborate with designers to improve user experience.',
-            apply_url: '#',
+            apply_url: 'https://remoteok.com/',
             salary: '₹15,000 / month',
             tags: ['Internship', 'Frontend', 'JavaScript'],
             riskScore: 12,
@@ -1640,7 +1690,7 @@ document.addEventListener('DOMContentLoaded', () => {
             company: 'SecureNet Systems',
             location: 'Hyderabad, India',
             description: 'Build APIs, optimize database queries, and manage backend services focused on reliability and security.',
-            apply_url: '#',
+            apply_url: 'https://remoteok.com/',
             salary: '₹8 - 12 LPA',
             tags: ['Backend', 'Node.js', 'APIs'],
             riskScore: 85,
@@ -1652,7 +1702,7 @@ document.addEventListener('DOMContentLoaded', () => {
             company: 'DataFlow Corp',
             location: 'Remote',
             description: 'Analyze campaign and user data, prepare dashboards, and generate actionable insights for product teams.',
-            apply_url: '#',
+            apply_url: 'https://remoteok.com/',
             salary: '₹6 - 8 LPA',
             tags: ['SQL', 'Excel', 'Analytics'],
             riskScore: 25,
@@ -1685,7 +1735,7 @@ document.addEventListener('DOMContentLoaded', () => {
             company: job.company || job.company_name || 'Unknown Company',
             location: job.location || 'Remote',
             description: job.description || job.job_description || '',
-            apply_url: job.apply_url || job.url || '#',
+            apply_url: job.apply_url || job.url || 'https://remoteok.com/',
             salary: job.salary || null,
             tags: Array.isArray(job.tags) ? job.tags : [],
             riskScore: Number.isFinite(job.riskScore) ? job.riskScore : (Number.isFinite(job.risk_score) ? job.risk_score : 0),
@@ -1922,7 +1972,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 ? `<span class="job-dynamic-salary">${job.salary}</span>`
                 : '<span></span>';
             return `
-                            <div class="job-dynamic-card job-card" data-job-index="${index}" onclick="openModal(${index})">
+              <div class="job-dynamic-card job-card" data-job-index="${index}">
                 <div class="job-dynamic-header">
                   <h3>${job.position}</h3>
                   <span class="risk-tag ${tagClass}">${job.status}</span>

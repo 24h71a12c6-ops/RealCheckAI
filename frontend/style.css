@@ -304,7 +304,7 @@ body.light .profile-dropdown-header { border-bottom-color: #c8dea0; }
 body.light .hero {
   background:
     linear-gradient(rgba(0,0,0,0.38) 0%, rgba(0,0,0,0.28) 100%),
-    url('green.jpeg') center center / cover no-repeat;
+    url('assets/green.jpeg') center center / cover no-repeat;
   background-attachment: fixed;
 }
 body.light .hero::before {
@@ -517,7 +517,7 @@ body.light .view-btn:hover {
   overflow: hidden;
   background:
     linear-gradient(rgba(0,0,0,0.38) 0%, rgba(0,0,0,0.28) 100%),
-    url('green.jpeg') center center / cover no-repeat;
+    url('assets/green.jpeg') center center / cover no-repeat;
   background-attachment: fixed;
 }
 .hero::before {

@@ -53,7 +53,7 @@ You should see: `Server running on port 5000`
 
 ### Step 2: Open the Frontend
 
-1. Open `index.html` in your web browser or use a local dev server
+1. Open `frontend/index.html` in your web browser or use a local dev server
    - Option A: Right-click > Open with > Browser
    - Option B: Use VS Code Live Server extension
    - Option C: Python server: `python -m http.server 8000`
@@ -92,10 +92,11 @@ Results should display:
 
 ```
 RealCheckAI/
-├── index.html                    (Frontend Homepage)
-├── style.css                     (Styling for all sections)
-├── script.js                     (Form handler & animations)
-├── assets/                       (Images & resources)
+├── frontend/
+│   ├── index.html                (Frontend Homepage)
+│   ├── style.css                 (Styling for all sections)
+│   ├── script.js                 (Form handler & animations)
+│   └── assets/                   (Images & resources)
 └── realcheck-backend/
     ├── server.js                 (Express app entry point)
     ├── .env                      (API keys & config)

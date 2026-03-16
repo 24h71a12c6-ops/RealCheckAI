@@ -5,6 +5,7 @@ const axios = require('axios');
 const cors = require('cors');
 const path = require('path');
 const analyzeJobRoute = require('./routes/analyzeJob');
+const domainRoutes = require('./routes/domain');
 const { callGeminiAnalysis } = require('./services/scamDetector');
 
 const app = express();
@@ -13,7 +14,7 @@ const PORT = process.env.PORT || 5000;
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '..')));
+app.use(express.static(path.join(__dirname, '..', 'frontend')));
 
 app.get('/api/firebase-config', (req, res) => {
     const config = {
@@ -127,6 +128,7 @@ app.get('/api/health/llm', async (req, res) => {
 });
 
 // Routes
+app.use('/api', domainRoutes);
 app.use('/api/analyze-job', analyzeJobRoute);
 
 app.get('/api/remote-jobs', async (req, res) => {

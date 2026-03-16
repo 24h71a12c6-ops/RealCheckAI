@@ -1,5 +1,7 @@
 require("dotenv").config();
 const axios = require("axios");
+const { verifyDomain } = require("./domainCheck");
+const { callBertPredict } = require("./bertClient");
 
 // (OpenAI removed — using pattern-based AI simulation instead)
 
@@ -406,26 +408,36 @@ Output ONLY valid JSON with this exact structure:
 
 async function getHybridScore(userInput, hardRulesResult) {
   const llmAnalysis = await callGeminiAnalysis(userInput);
+  const bertAnalysis = await callBertPredict(userInput);
 
   const HARD_WEIGHT = 0.7;
   const LLM_WEIGHT = 0.3;
 
+  // If BERT is available, borrow a small fraction of the blend.
+  // Keep weights stable when BERT is unavailable.
+  const BERT_WEIGHT = bertAnalysis.ok && Number.isFinite(bertAnalysis.score_0_100) ? 0.2 : 0;
+  const HARD_WEIGHT_ADJ = BERT_WEIGHT ? 0.6 : HARD_WEIGHT;
+  const LLM_WEIGHT_ADJ = BERT_WEIGHT ? 0.2 : LLM_WEIGHT;
+
   const hardScore = Number(hardRulesResult.scam_score || 0);
   const hasLiveLlm = Number.isFinite(llmAnalysis.ai_score);
+  const hasLiveBert = bertAnalysis.ok && Number.isFinite(bertAnalysis.score_0_100);
 
   // If LLM fails, do NOT pretend this is hybrid: trust hard rules 100%.
-  if (!hasLiveLlm) {
+  if (!hasLiveLlm && !hasLiveBert) {
     return {
       final_score: Math.max(0, Math.min(100, Math.round(hardScore))),
       llm: llmAnalysis,
-      weights: { hard: 1, llm: 0 },
+      bert: bertAnalysis,
+      weights: { hard: 1, llm: 0, bert: 0 },
       hybrid_active: false
     };
   }
 
   const blended =
-    (hardScore * HARD_WEIGHT) +
-    (Number(llmAnalysis.ai_score) * LLM_WEIGHT);
+    (hardScore * HARD_WEIGHT_ADJ) +
+    (Number.isFinite(llmAnalysis.ai_score) ? (Number(llmAnalysis.ai_score) * LLM_WEIGHT_ADJ) : 0) +
+    (hasLiveBert ? (Number(bertAnalysis.score_0_100) * BERT_WEIGHT) : 0);
 
   let hybridScore = Math.round(blended);
 
@@ -437,7 +449,8 @@ async function getHybridScore(userInput, hardRulesResult) {
   return {
     final_score: Math.max(0, Math.min(100, hybridScore)),
     llm: llmAnalysis,
-    weights: { hard: HARD_WEIGHT, llm: LLM_WEIGHT },
+    bert: bertAnalysis,
+    weights: { hard: HARD_WEIGHT_ADJ, llm: LLM_WEIGHT_ADJ, bert: BERT_WEIGHT },
     hybrid_active: true
   };
 }
@@ -470,11 +483,12 @@ function companySlugFromName(companyName) {
 // ─── External Checks ──────────────────────────────────────────────────────────
 
 async function getDomainCreationDate(domain) {
-  if (!domain || !process.env.WHOIS_API_KEY) return null;
+  if (!domain) return null;
   try {
-    const url = `https://www.whoisxmlapi.com/whoisserver/WhoisService?apiKey=${process.env.WHOIS_API_KEY}&domainName=${domain}&outputFormat=JSON`;
-    const res = await axios.get(url, { timeout: 8000 });
-    return res.data.WhoisRecord?.createdDate || null;
+    // whois-json based lookup (no API key required)
+    const info = await verifyDomain(domain);
+    if (info && info.createdOn) return info.createdOn;
+    return null;
   } catch (err) {
     console.error("WHOIS error:", err.message);
     return null;
@@ -484,6 +498,32 @@ async function getDomainCreationDate(domain) {
 function domainAgeInDays(createdDate) {
   if (!createdDate) return null;
   return (Date.now() - new Date(createdDate).getTime()) / 86400000;
+}
+
+// Domain-only scoring helper (simple, frontend-friendly)
+// Usage: const { checkJobOffer } = require('./services/scamDetector');
+async function checkJobOffer(url) {
+  try {
+    const domainResult = await verifyDomain(url);
+
+    let domainScore = 100; // starting score
+    const ageDays = Number.isFinite(domainResult?.ageDays) ? domainResult.ageDays : null;
+
+    if (ageDays !== null) {
+      if (ageDays < 90) domainScore -= 25;
+      else if (ageDays < 365) domainScore -= 10;
+    }
+
+    return {
+      domain: domainResult?.domain || null,
+      domainRisk: domainResult?.risk || domainResult?.status || "Unknown",
+      domainScore,
+      // Backward compatibility for any existing callers
+      score: domainScore
+    };
+  } catch (error) {
+    return { error: error?.message || String(error) };
+  }
 }
 
 async function checkWebsiteExists(url) {
@@ -588,6 +628,7 @@ async function detectScam({ message, email, website, companyName }) {
   let domainStatus = "not_checked";
   let domainAgeDays = null;
   let domainCreatedDate = null;
+  let domainResult = null;
   const greenFlags = [];
 
   // 1. Payment keyword + regex pattern (+40)
@@ -721,9 +762,9 @@ async function detectScam({ message, email, website, companyName }) {
     email: effectiveEmail
   });
 
-  const [websiteExists, domainCreated, linkedInChecks] = await Promise.all([
+  const [websiteExists, domainIntel, linkedInChecks] = await Promise.all([
     normSite ? checkWebsiteExists(normSite)            : Promise.resolve(null),
-    domain   ? getDomainCreationDate(domain)            : Promise.resolve(null),
+    domain   ? verifyDomain(domain)                     : Promise.resolve(null),
     linkedInCandidates.length > 0
       ? Promise.all(linkedInCandidates.map((candidate) => checkLinkedInCompany(candidate)))
       : Promise.resolve([])
@@ -742,19 +783,19 @@ async function detectScam({ message, email, website, companyName }) {
 
   // 6. Domain age via WHOIS (+40)
   if (domain) {
-    domainCreatedDate = domainCreated || null;
-    const ageDays = domainAgeInDays(domainCreated);
-    domainAgeDays = ageDays !== null ? Math.round(ageDays) : null;
+    domainResult = domainIntel || null;
+    domainCreatedDate = domainResult?.createdOn || null;
+    domainAgeDays = Number.isFinite(domainResult?.ageDays) ? domainResult.ageDays : null;
 
-    if (ageDays !== null && ageDays < 60) {
+    if (domainAgeDays !== null && domainAgeDays < 90) {
       domainStatus = "new";
       riskScore += 40;
-      reasons.push(`Domain is very new — only ${Math.round(ageDays)} day(s) old`);
-    } else if (ageDays !== null && ageDays < 180) {
+      reasons.push(`Domain is very new — only ${domainAgeDays} day(s) old`);
+    } else if (domainAgeDays !== null && domainAgeDays < 365) {
       domainStatus = "young";
       riskScore += 15;
-      reasons.push(`Domain is relatively new — ${Math.round(ageDays)} day(s) old`);
-    } else if (ageDays === null) {
+      reasons.push(`Domain is relatively new — ${domainAgeDays} day(s) old`);
+    } else if (domainAgeDays === null) {
       domainStatus = "unknown";
       riskScore += 30;
       reasons.push("Domain intelligence unavailable (WHOIS unknown) — treating as risk by default");
@@ -933,6 +974,10 @@ async function detectScam({ message, email, website, companyName }) {
     llm_reason: hybrid.llm.reason,
     llm_markers: Array.isArray(hybrid.llm.markers) ? hybrid.llm.markers : [],
     llm_source: hybrid.llm.source,
+    bert_score: hybrid.bert?.score_0_100 ?? null,
+    bert_label: hybrid.bert?.label ?? null,
+    bert_source: hybrid.bert?.source ?? null,
+    bert_reason: hybrid.bert?.ok ? null : (hybrid.bert?.reason || null),
     hybrid_active: Boolean(hybrid.hybrid_active),
     weights: hybrid.weights,
     green_bonus: greenBonus,
@@ -947,8 +992,20 @@ async function detectScam({ message, email, website, companyName }) {
     domain_age_days: domainAgeDays,
     domain_created_date: domainCreatedDate,
     domain_checked: domain || null,
+    domain_result: domainResult,
+    domainRisk: domainResult?.risk || domainResult?.status || null,
+    domainScore: (() => {
+      // Mirror checkJobOffer scoring so UI can show a simple domain score alongside overall scam score.
+      let s = 100;
+      const age = Number.isFinite(domainAgeDays) ? domainAgeDays : null;
+      if (age !== null) {
+        if (age < 90) s -= 25;
+        else if (age < 365) s -= 10;
+      }
+      return s;
+    })(),
     metadata
   };
 }
 
-module.exports = { detectScam, callGeminiAnalysis };
+module.exports = { detectScam, callGeminiAnalysis, checkJobOffer };

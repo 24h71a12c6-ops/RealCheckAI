@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.pyc
+
+# Model artifacts (keep local)
+scam-bert/
+*.bin
+*.safetensors
+
+# Keep the folder in git (empty placeholder)
+!scam-bert/.gitkeep
