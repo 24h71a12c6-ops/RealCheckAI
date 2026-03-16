@@ -79,11 +79,57 @@ def _extract_monthly_salary_in_inr(text: str) -> Tuple[float | None, str | None]
     return None, None
 
 
-def deep_scan(text: str) -> List[str]:
-    """Rule-based forensic scan for scam signals (human logic layer)."""
+def _split_sentences(text: str) -> List[str]:
+    return [s.strip() for s in re.split(r"[.!?\n\r]+", str(text or "")) if s.strip()]
+
+
+def deep_scan(text: str) -> Tuple[List[str], int]:
+    """Aggressive rule scan: returns (findings, risk_score_0_100).
+
+    Goal: for demo safety, obvious pay-to-play scams (refund/deposit/payment traps)
+    must *always* land in HIGH RISK even if the tiny BERT model is under-confident.
+    """
+
     text_l = (text or "").lower()
     findings: List[str] = []
+    risk_score = 0
 
+    # High-priority red flags (direct weight add)
+    # (This intentionally biases towards safety in demos.)
+    critical_traps = {
+        "refundable": 45,
+        "security deposit": 50,
+        "registration fee": 50,
+        "whatsapp": 25,
+    }
+
+    # Keyword weights
+    for word, weight in critical_traps.items():
+        if word in text_l:
+            findings.append(f"🚩 {word.upper()} detected")
+            risk_score += weight
+
+    # Token-style weights (regex to avoid accidental matches)
+    if re.search(r"\bpay\b", text_l):
+        findings.append("🚩 PAY detected")
+        risk_score += 30
+
+    if re.search(r"(?:₹\s*)?\b999\b", text_l):
+        findings.append("🚩 999 detected")
+        risk_score += 40
+
+    # Critical override: refundable + payment ask close together (often split across lines)
+    refundable_pay_near = bool(
+        re.search(r"\brefundable\b[\s\S]{0,120}\b(pay|payment|deposit|upi|phonepe|gpay|paytm|transfer|send)\b", text_l)
+        or re.search(r"\b(pay|payment|deposit|upi|phonepe|gpay|paytm|transfer|send)\b[\s\S]{0,120}\brefundable\b", text_l)
+    )
+    if refundable_pay_near:
+        findings.append(
+            "🚩 CRITICAL PAYMENT TRAP detected (refundable + pay/deposit/UPI appears together)"
+        )
+        risk_score = max(risk_score, 95)
+
+    # --- Keep the richer explanations for the report (nice UI) ---
     # 1) Advanced Financial Traps
     financial_traps = {
         "refundable": "Legitimate employers do not ask candidates to pay money, even if they call it 'refundable'.",
@@ -145,7 +191,7 @@ def deep_scan(text: str) -> List[str]:
         r"gst\s*(registration|compliance)": "Tax/GST compliance steps should not require candidate payments to a recruiter.",
     }
 
-    # Combine simple keyword checks
+    # Combine simple keyword checks (report-only)
     for word, reason in {**financial_traps, **process_traps}.items():
         if word in text_l:
             findings.append(f"🚩 {word.upper()}: {reason}")
@@ -154,6 +200,7 @@ def deep_scan(text: str) -> List[str]:
     for pattern, reason in urgency_patterns.items():
         if re.search(pattern, text_l, flags=re.IGNORECASE):
             findings.append(f"🚩 URGENCY: {reason}")
+            risk_score += 15
             break
 
     # Domain spoofing checks
@@ -164,6 +211,7 @@ def deep_scan(text: str) -> List[str]:
             findings.append(
                 f"🚩 DOMAIN SPOOFING: Recruiter is using a free email provider ({domain}). Prefer official domains like @company.com."
             )
+            risk_score += 25
             break
 
     # Salary anomaly check
@@ -174,15 +222,17 @@ def deep_scan(text: str) -> List[str]:
             findings.append(
                 "🚩 SALARY ANOMALY: Unusually high pay for a low-complexity role (e.g., data entry/typing). Verify the employer independently."
             )
+            risk_score += 20
 
     # Compliance bait + payment context
     payment_context = bool(re.search(r"(fee|deposit|pay|payment|upi|phonepe|gpay|paytm)", text_l))
     for pattern, reason in compliance_bait_patterns.items():
         if re.search(pattern, text_l, flags=re.IGNORECASE) and payment_context:
             findings.append(f"🚩 COMPLIANCE PRETEXT: {reason}")
+            risk_score += 10
             break
 
-    return findings
+    return findings, int(max(0, min(100, risk_score)))
 
 
 @app.get("/")
@@ -230,13 +280,19 @@ async def predict(message: Message):
     predicted = int(torch.argmax(probs).item()) if probs.numel() else 0
 
     # Expert rule analysis (your new layers)
-    red_flags = deep_scan(text)
+    red_flags, rule_score = deep_scan(text)
 
-    # Final decision logic: Rules always count; AI only counts when highly confident.
-    # (This avoids random false positives when using a non-fine-tuned base checkpoint.)
-    ai_high_conf_scam = (predicted == 1) and (scam_prob >= 0.85)
-    is_scam = ai_high_conf_scam or (len(red_flags) > 0)
-    label = "SCAM" if is_scam else "REAL"
+    # AI boost: only add points when model confidence is high.
+    ai_score = 40 if scam_prob >= 0.80 else 0
+    total_risk = int(max(0, min(100, rule_score + ai_score)))
+
+    risk_level = "High" if total_risk >= 70 else "Medium" if total_risk >= 40 else "Low"
+    risk_label = "HIGH RISK" if total_risk >= 70 else "MEDIUM RISK" if total_risk >= 40 else "SAFE"
+
+    is_scam = total_risk >= 70
+
+    # Keep compatibility with the Node client expectations (label used as informational only).
+    label = "SCAM" if total_risk >= 70 else "REAL"
 
     return {
         "text": text,
@@ -248,7 +304,13 @@ async def predict(message: Message):
         "confidence": [[legit_prob, scam_prob]],
         "model_path": MODEL_PATH,
         # New rich output
+        "risk_level": risk_level,
+        "risk_label": risk_label,
         "risk_report": red_flags if red_flags else ["No immediate red flags found."],
+        "analysis": red_flags if red_flags else ["No immediate red flags found."],
+        "risk_score": total_risk,
+        "rule_score": rule_score,
+        "ai_score": ai_score,
         "safety_score": 0 if is_scam else 100,
     }
 

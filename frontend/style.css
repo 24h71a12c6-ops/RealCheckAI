@@ -2022,6 +2022,71 @@ body.light .job-modal-meta-label {
   transition: 0.2s;
 }
 
+/* Screenshot upload (Instant Analyzer) — theme-aware */
+.upload-container--screenshot {
+  cursor: default;
+  background: #0A0A0A
+}
+
+.upload-input {
+  display: block;
+  margin: 14px auto 0;
+  max-width: 520px;
+  width: 100%;
+  font-size: 0.9rem;
+}
+
+.upload-status {
+  margin-top: 10px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* Dark mode: make the box dark, but render the upload text in black (on a light chip) */
+body:not(.light) .upload-container--screenshot {
+  background: #0A0A0A;
+  border-color: rgba(var(--primary-rgb), 0.55);
+}
+
+
+body:not(.light) .upload-status--screenshot {
+  display: inline-block;
+}
+
+body:not(.light) .upload-input--screenshot {
+  color: #000000;
+  background: #e5e7eb;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  padding: 10px 12px;
+  border-radius: 12px;
+}
+
+body:not(.light) .upload-input--screenshot::file-selector-button {
+  background: var(--primary);
+  color: #0A0A0A;
+  border: none;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-weight: 700;
+  margin-right: 10px;
+  cursor: pointer;
+}
+
+/* Light mode: keep readable, and ensure the screenshot-upload text is black */
+body.light .upload-container--screenshot {
+  background: #f0f7ff;
+  border-color: rgba(0, 86, 247, 0.45);
+}
+
+body.light .upload-label--screenshot,
+body.light .upload-status--screenshot {
+  color: #000000;
+}
+
+body.light .upload-input--screenshot {
+  color: #000000;
+}
+
 .upload-container:hover {
   border-color: var(--orange);
   background: rgba(249, 168, 37, 0.04);

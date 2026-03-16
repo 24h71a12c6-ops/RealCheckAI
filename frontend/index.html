@@ -159,7 +159,17 @@
           <label style="font-weight: bold; color: #002147; display: block; margin-bottom: 10px;">Paste Job Details (All-in-One)</label>
           <textarea id="jobDetails" style="width: 100%; height: 150px; padding: 20px; border: 1.5px solid #0056f7; border-radius: 15px; font-size: 16px; outline: none; box-sizing: border-box;" placeholder="Paste everything here: job description, recruiter email, website URL/domain, salary, joining details, and any message text..."></textarea>
         </div>
-
+        <div class="analyzer-upload" style="margin-bottom: 25px; text-align: center;">
+          <p class="analyzer-upload-divider" style="font-weight: bold; margin-bottom: 10px;">- OR -</p>
+          <div class="upload-container upload-container--screenshot" aria-label="Upload screenshot for OCR">
+            <label for="imageUpload" class="upload-label upload-label--screenshot">
+             
+             
+            </label>
+            <input type="file" id="imageUpload" class="upload-input upload-input--screenshot" accept="image/*" />
+            <p id="ocrStatus" class="upload-status upload-status--screenshot" aria-live="polite"></p>
+          </div>
+        </div>
         <button onclick="runAnalysis()" id="analyzeBtn" style="width: auto; min-width: 200px; padding: 14px 40px; display: block; margin: 0 auto; background: #2563eb; color: white; border: none; border-radius: 50px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s; box-shadow: 0 5px 15px rgba(37, 99, 235, 0.3);">
           🔍 Analyze Now
         </button>

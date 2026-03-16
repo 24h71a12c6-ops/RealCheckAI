@@ -305,6 +305,13 @@ function parseJsonObjectSafe(text) {
   }
 }
 
+function splitSentences(text) {
+  return String(text || "")
+    .split(/[.!?\n\r]+/g)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 async function callGeminiAnalysis(userInput) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -442,7 +449,9 @@ async function getHybridScore(userInput, hardRulesResult) {
   let hybridScore = Math.round(blended);
 
   // Critical override: strong hard-rule certainty should stay high.
-  if (hardRulesResult.scam_score > 80 && hybridScore < 70) {
+  if (hardRulesResult.scam_score >= 95 && hybridScore < 95) {
+    hybridScore = 95;
+  } else if (hardRulesResult.scam_score > 80 && hybridScore < 70) {
     hybridScore = Math.max(hybridScore, 85);
   }
 
@@ -641,6 +650,17 @@ async function detectScam({ message, email, website, companyName }) {
   const hasHardPaymentOverride = hardPaymentOverrideTerms.some((term) => normMsg.includes(term));
   const hasDigitalWalletRequest = /(upi|phonepe|google\s*pay|gpay|paytm)/i.test(normMsg);
 
+  // CRITICAL: refundable + payment request in the same sentence is a classic deposit/refund trap.
+  // We treat this as near-certain scam intent and prevent model blending from diluting the score.
+  const msgSentences = splitSentences(normMsg);
+  const refundablePayNear =
+    /\brefundable\b[\s\S]{0,120}\b(pay|payment|deposit|upi|phonepe|gpay|paytm|transfer|send)\b/i.test(normMsg) ||
+    /\b(pay|payment|deposit|upi|phonepe|gpay|paytm|transfer|send)\b[\s\S]{0,120}\brefundable\b/i.test(normMsg);
+
+  const criticalRefundablePayCombo = refundablePayNear || msgSentences.some((s) =>
+    s.includes("refundable") && /\b(pay|payment|deposit|upi|phonepe|gpay|paytm|transfer|send)\b/i.test(s)
+  );
+
   // Avoid false positives for normal stipend/salary mentions.
   const compensationOnlyAmount =
     hasAmountMention &&
@@ -667,6 +687,11 @@ async function detectScam({ message, email, website, companyName }) {
   if (hasHardPaymentOverride) {
     riskScore += 35;
     reasons.push("Critical payment-channel signal detected (UPI/PhonePe/Google Pay/fee request)");
+  }
+
+  if (criticalRefundablePayCombo) {
+    riskScore += 60;
+    reasons.push("CRITICAL: 'refundable' + payment request appears in the same sentence (deposit/refund trap)");
   }
 
   // 2. Suspicious recruitment channels (+30)
@@ -926,7 +951,7 @@ async function detectScam({ message, email, website, companyName }) {
   const greenBonusRaw = greenFlags.reduce((sum, g) => sum + Number(g.points || 0), 0);
   const hasCriticalPaymentSignal = hasPaymentTrap || hasPayPat || matchedKw.length > 0 || hasActionablePayDemand;
   const hasCriticalSensitiveDataSignal = hasSensitivePreHiringRequest && (hasNoInterview || hasImmediateJoining || !hasProfessionalMeetingLink);
-  const hardOverrideActive = hasHardPaymentOverride || criticalBrandPaymentFraud;
+  const hardOverrideActive = hasHardPaymentOverride || criticalBrandPaymentFraud || criticalRefundablePayCombo;
 
   // Allow stronger neutralization for truly clean offers, but be strict when money/sensitive-data red flags exist.
   const greenCap = hardOverrideActive ? 0 : (hasCriticalPaymentSignal || hasCriticalSensitiveDataSignal ? 20 : 50);

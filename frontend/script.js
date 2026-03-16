@@ -18,6 +18,8 @@ window.runAnalysis = async function runAnalysis() {
     const btn = document.getElementById('analyzeBtn');
     const resetBtn = document.getElementById('resetBtn');
     const textEl = document.getElementById('jobDetails');
+    const imageUpload = document.getElementById('imageUpload');
+    const ocrStatus = document.getElementById('ocrStatus');
     const resultDiv = document.getElementById('analysisResult');
 
     if (!btn || !textEl || !resultDiv) {
@@ -29,6 +31,47 @@ window.runAnalysis = async function runAnalysis() {
     btn.disabled = true;
 
     let finalContent = String(textEl.value || '');
+
+    const extractOcrTextIfAny = async () => {
+        const file = imageUpload && imageUpload.files ? imageUpload.files[0] : null;
+        if (!file) return '';
+
+        if (!window.Tesseract || typeof window.Tesseract.recognize !== 'function') {
+            if (ocrStatus) ocrStatus.innerText = 'OCR library not loaded. Please refresh or paste text manually.';
+            return '';
+        }
+
+        if (ocrStatus) ocrStatus.innerText = 'Scanning image for text…';
+        try {
+            const res = await window.Tesseract.recognize(file, 'eng', {
+                logger: (m) => {
+                    if (!ocrStatus || !m) return;
+                    const progress = typeof m.progress === 'number' ? Math.round(m.progress * 100) : null;
+                    if (progress !== null && m.status) {
+                        ocrStatus.innerText = `OCR: ${m.status} (${progress}%)`;
+                    } else if (m.status) {
+                        ocrStatus.innerText = `OCR: ${m.status}`;
+                    }
+                }
+            });
+
+            const text = String(res?.data?.text || '').trim();
+            if (ocrStatus) ocrStatus.innerText = text ? 'Text extracted successfully!' : 'No readable text found in the image.';
+            return text;
+        } catch (err) {
+            if (ocrStatus) ocrStatus.innerText = `OCR failed: ${err?.message || String(err)}`;
+            return '';
+        }
+    };
+
+    // If an image is uploaded, use OCR output (append to pasted text if both exist).
+    const ocrText = await extractOcrTextIfAny();
+    if (ocrText) {
+        finalContent = finalContent.trim()
+            ? `${finalContent.trim()}\n\n--- OCR Extracted Text ---\n${ocrText}`
+            : ocrText;
+        if (textEl) textEl.value = finalContent;
+    }
 
     if (!finalContent.trim()) {
         alert('Please paste job details first!');
@@ -177,13 +220,22 @@ window.runAnalysis = async function runAnalysis() {
                 const label = String(data.label || '').toUpperCase();
                 const report = Array.isArray(data.risk_report) ? data.risk_report : [];
 
+                const explicitRiskScore = Number(data.risk_score);
                 const scamProb = Number(data.scam_probability);
-                const score = Number.isFinite(scamProb)
-                    ? Math.max(0, Math.min(100, Math.round(scamProb * 100)))
-                    : (label === 'SCAM' ? 90 : 10);
+
+                let score = Number.isFinite(explicitRiskScore)
+                    ? Math.max(0, Math.min(100, Math.round(explicitRiskScore)))
+                    : (Number.isFinite(scamProb)
+                        ? Math.max(0, Math.min(100, Math.round(scamProb * 100)))
+                        : (label === 'SCAM' ? 90 : 10));
+
+                // The demo BERT checkpoint can be under-confident; if rules say SCAM, don't show a low score.
+                if (label === 'SCAM' && score < 70) {
+                    score = Math.max(score, 80);
+                }
 
                 if (scoreText) scoreText.innerText = String(score);
-                setBadgeUi(label === 'SCAM' ? 'High' : 'Low');
+                setBadgeUi(score >= 70 ? 'High' : score >= 35 ? 'Medium' : 'Low');
 
                 if (label === 'SCAM') {
                     renderVerdict(
