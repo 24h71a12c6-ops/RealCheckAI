@@ -334,6 +334,256 @@ window.resetForm = function resetForm() {
     }
 };
 
+// ========== RESUME BUILDER (LIVE PREVIEW) ==========
+window.updateResume = function updateResume() {
+    const safeSetText = (id, value, fallback = '') => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const next = (value ?? '').toString().trim();
+        el.textContent = next || fallback;
+    };
+
+    const name = document.getElementById('resName')?.value;
+    const title = document.getElementById('resTitle')?.value;
+    const contact = document.getElementById('resContact')?.value;
+    const summary = document.getElementById('resSummary')?.value;
+    const exp = document.getElementById('resExp')?.value;
+
+    safeSetText('p-name', name, 'YOUR NAME');
+    safeSetText('p-title', title, 'Job Title');
+    safeSetText('p-contact', contact, 'contact@info.com');
+    safeSetText('p-summary', summary, 'Summary text...');
+
+    const expEl = document.getElementById('p-exp');
+    if (expEl) {
+        const txt = (exp ?? '').toString().trim();
+        expEl.textContent = txt || 'Details...';
+        expEl.style.whiteSpace = 'pre-line';
+    }
+};
+
+// ========== SMART RESUME BUILDER (GENERATE + PRINT) ==========
+window.generateSmartResume = function generateSmartResume() {
+    const escapeHtml = (value) => String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+
+    const rawName = document.getElementById('resName')?.value;
+    const rawTitle = document.getElementById('resTitle')?.value;
+    const rawContact = document.getElementById('resContact')?.value;
+    const rawSummary = document.getElementById('resSummary')?.value;
+    const rawSkills = document.getElementById('resSkills')?.value;
+    const rawProjects = document.getElementById('resExp')?.value;
+
+    const name = String(rawName || 'Your Name').trim() || 'Your Name';
+    const title = String(rawTitle || 'Professional Title').trim() || 'Professional Title';
+    const contact = String(rawContact || 'Email | Phone | LinkedIn').trim() || 'Email | Phone | LinkedIn';
+    let summary = String(rawSummary || '').trim();
+    const skills = String(rawSkills || '').trim();
+    const projects = String(rawProjects || '').trim();
+
+    // Smart Text Improvement (manual replacements)
+    if (!summary) summary = 'Add a concise profile summary describing your strengths and outcomes.';
+
+    const proWords = { made: 'Developed', know: 'Expertise in', helped: 'Assisted' };
+    Object.keys(proWords).forEach((w) => {
+        summary = summary.replace(new RegExp(w, 'gi'), proWords[w]);
+    });
+
+    // Automatic bullet points for comma-separated skills
+    const skillItems = (skills || 'Skill details here...')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .slice(0, 40)
+        .map((s) => `<li>${escapeHtml(s)}</li>`)
+        .join('');
+
+    const projectHtml = escapeHtml(projects || 'Project/experience details here...').replace(/\n/g, '<br>');
+    const summaryOptimized = escapeHtml(summary).replace(/\n/g, '<br>');
+
+    // Contact details with icons (split by | or newlines)
+    const contactParts = contact
+        .split(/\||\n/g)
+        .map((p) => p.trim())
+        .filter(Boolean)
+        .slice(0, 6);
+
+    const iconForContact = (text) => {
+        const t = String(text || '').toLowerCase();
+        if (t.includes('@')) return '✉';
+        if (t.includes('linkedin')) return 'in';
+        if (t.includes('github')) return '⌂';
+        if (t.includes('http') || t.includes('www') || t.includes('.com') || t.includes('.in')) return '🌐';
+        if (/[+]?\d[\d\s\-()]{6,}/.test(t)) return '☎';
+        return '•';
+    };
+
+    const contactHtml = contactParts.length
+        ? contactParts.map((p) => {
+            const icon = iconForContact(p);
+            const iconClass = icon === 'in' ? 'icon icon-in' : 'icon';
+            return `
+              <div class="contact-item">
+                <span class="${iconClass}">${escapeHtml(icon)}</span>
+                <span class="contact-text">${escapeHtml(p)}</span>
+              </div>`;
+        }).join('')
+        : `<div class="contact-item"><span class="icon">✉</span><span class="contact-text">${escapeHtml(contact)}</span></div>`;
+
+    const printWin = window.open('', '_blank');
+    if (!printWin) {
+        alert('Popup blocked. Please allow popups for this site to download the resume PDF.');
+        return;
+    }
+
+    printWin.document.write(`
+        <html>
+        <head>
+            <meta charset="utf-8" />
+            <title>Resume - ${escapeHtml(name)}</title>
+            <style>
+                @page { size: A4; margin: 0; }
+                body {
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    margin: 0;
+                    padding: 0;
+                    min-height: 297mm;
+                    background: #ffffff;
+                }
+
+                .header {
+                    background: #1e293b;
+                    color: white;
+                    padding: 34px 40px;
+                    text-align: left;
+                }
+                .header h1 {
+                    margin: 0;
+                    font-size: 30px;
+                    letter-spacing: 2px;
+                    text-transform: uppercase;
+                }
+                .header p {
+                    margin: 6px 0 0;
+                    color: #94a3b8;
+                    font-weight: 700;
+                    font-size: 14px;
+                }
+
+                .contact-grid {
+                    margin-top: 14px;
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 8px 16px;
+                    font-size: 12px;
+                    color: #e2e8f0;
+                }
+                .contact-item { display: flex; align-items: center; gap: 8px; }
+                .icon {
+                    width: 18px; height: 18px;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    border-radius: 6px;
+                    background: rgba(255,255,255,0.10);
+                    font-size: 12px;
+                    line-height: 1;
+                }
+                .icon-in {
+                    font-weight: 900;
+                    font-family: Arial, sans-serif;
+                }
+                .contact-text { word-break: break-word; }
+
+                .content {
+                    padding: 28px 40px 40px;
+                    color: #334155;
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 22px;
+                }
+                .section {
+                    break-inside: avoid;
+                }
+                .section-title {
+                    font-size: 13px;
+                    font-weight: 900;
+                    color: #2563eb;
+                    border-bottom: 2px solid #e2e8f0;
+                    padding-bottom: 5px;
+                    text-transform: uppercase;
+                    margin-top: 6px;
+                    letter-spacing: 0.06em;
+                }
+                .item {
+                    margin: 10px 0;
+                    font-size: 13px;
+                    line-height: 1.65;
+                }
+                ul {
+                    padding-left: 18px;
+                    margin: 8px 0 0;
+                }
+                li {
+                    margin: 4px 0;
+                }
+
+                /* Full-width sections if needed */
+                .full { grid-column: 1 / -1; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>${escapeHtml(name.toUpperCase())}</h1>
+                <p>${escapeHtml(title)}</p>
+                <div class="contact-grid">${contactHtml}</div>
+            </div>
+
+            <div class="content">
+                <div class="section">
+                    <div class="section-title">Professional Profile</div>
+                    <div class="item">${summaryOptimized}</div>
+
+                    <div class="section-title" style="margin-top: 16px;">Technical Expertise</div>
+                    <ul class="item">${skillItems}</ul>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">Projects &amp; Achievements</div>
+                    <div class="item">${projectHtml}</div>
+                </div>
+            </div>
+        </body>
+        </html>
+    `);
+
+    printWin.document.close();
+    printWin.focus();
+    setTimeout(() => {
+        try { printWin.print(); } catch (_) {}
+    }, 500);
+};
+
+(function initResumeBuilder() {
+    const init = () => {
+        try {
+            window.updateResume();
+        } catch (_) {
+            // no-op: resume section might not exist on some pages
+        }
+    };
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+})();
+
 let firebaseAuth = null;
 let firestoreDb = null;
 let firebaseReady = false;

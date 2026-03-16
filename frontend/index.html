@@ -286,6 +286,33 @@
       </div>
     </div>
   </section>
+
+
+  <!-- ========== RESUME BUILDER ========== -->
+  <section class="resume-builder-section section-bg reveal-section" id="resume-builder">
+    <div class="container">
+      <div class="section-header text-center reveal">
+        <span class="badge-primary">📄 Resume Builder</span>
+        <h2>Resume Builder</h2>
+        <p>Enter your details to generate a clean, professional resume and download it as a PDF.</p>
+      </div>
+
+      <div class="card resume-builder-smart-card reveal" style="max-width: 600px; margin: auto;">
+        <h1 style="text-align: center; color: var(--primary);">Professional Resume Builder</h1>
+        <p style="text-align: center; color: #94a3b8;">Enter details to generate a professionally formatted resume.</p>
+
+        <input type="text" id="resName" placeholder="Full Name">
+        <input type="text" id="resTitle" placeholder="Target Job Title (e.g. Web Developer)">
+        <input type="text" id="resContact" placeholder="Email | Phone | LinkedIn">
+        <textarea id="resSummary" placeholder="Your Summary (Simple words are fine)"></textarea>
+
+        <textarea id="resSkills" placeholder="Skills & Expertise (e.g., JavaScript, React, SQL)"></textarea>
+        <textarea id="resExp" placeholder="Projects & Experience (write points, one per line)"></textarea>
+
+        <button class="btn-check" onclick="generateSmartResume()">📥 Generate &amp; Download PDF</button>
+      </div>
+    </div>
+  </section>
    <!-- ========== HOW IT WORKS ========== -->
   <section class="trust-section section-bg reveal-section" id="scam-detection">
     <div class="container">
