@@ -137,6 +137,92 @@ window.runAnalysis = async function runAnalysis() {
         verdict.innerHTML = `${summary}<ul class="result-list">${signals.map((signal) => `<li class="${signal.tone === 'warning' ? 'warning' : signal.tone === 'danger' ? 'danger' : ''}">${escapeHtmlSimple(signal.text)}</li>`).join('')}</ul>`;
     };
 
+    const renderRiskCardsReport = (summaryText, metaLines = [], cards = [], extraLines = []) => {
+        if (!verdict) return;
+
+        const meta = normalizeSignals(metaLines)
+            .map((m) => `<span class="risk-pill">${escapeHtmlSimple(m.text || m)}</span>`)
+            .join('');
+
+        const escapeRegExp = (s) => String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const highlightEvidence = (snippet, terms = []) => {
+            let out = escapeHtmlSimple(snippet || '');
+            const cleanTerms = Array.from(new Set((terms || []).map((t) => String(t || '').trim()).filter(Boolean))).slice(0, 8);
+            cleanTerms.forEach((term) => {
+                const re = new RegExp(escapeRegExp(term), 'gi');
+                out = out.replace(re, (m) => `<mark>${escapeHtmlSimple(m)}</mark>`);
+            });
+            return out;
+        };
+
+        const cardHtml = (cards || []).map((card) => {
+            const level = String(card.level || '').toLowerCase() || 'info';
+            const title = `${String(card.icon || '🧾')} ${String(card.title || 'Detected Risk')}`.trim();
+            const matched = Array.isArray(card.matched_terms) ? card.matched_terms : [];
+            const evidence = Array.isArray(card.evidence) ? card.evidence : [];
+
+            const matchedHtml = matched.length
+                ? `<div class="risk-card__meta">${matched.slice(0, 8).map((t) => `<span class="risk-pill">${escapeHtmlSimple(t)}</span>`).join('')}</div>`
+                : '';
+
+            const evidenceHtml = evidence.length
+                ? `<div class="risk-evidence">${evidence.slice(0, 2).map((snip) => `<div class="risk-evidence__snippet">${highlightEvidence(snip, matched)}</div>`).join('')}</div>`
+                : '';
+
+            return `
+            <div class="risk-card ${level}">
+                <div class="risk-card__title">${escapeHtmlSimple(title)}</div>
+                <div class="risk-card__body">${escapeHtmlSimple(card.message || '')}</div>
+                ${matchedHtml}
+                ${evidenceHtml}
+            </div>`;
+        }).join('');
+
+        const extras = normalizeSignals(extraLines);
+        const extrasHtml = extras.length
+            ? `<div class="risk-card info">
+                <div class="risk-card__title">🧾 Other Findings</div>
+                <div class="risk-card__list">${extras.slice(0, 8).map((e) => `<div class="risk-card__item">${escapeHtmlSimple(e.text || e)}</div>`).join('')}</div>
+              </div>`
+            : '';
+
+        verdict.innerHTML = `
+            <p class="verdict-summary">${escapeHtmlSimple(summaryText || 'Analysis complete.')}</p>
+            ${meta ? `<div class="risk-meta">${meta}</div>` : ''}
+            <div class="risk-cards">${cardHtml}${extrasHtml}</div>
+        `;
+    };
+
+    const setResumeBuilderDisabled = (disabled, noticeText) => {
+        const card = document.getElementById('resumeBuilderCard');
+        const notice = document.getElementById('resumeRiskNotice');
+        const btn = document.getElementById('resumeGenerateBtn');
+        const section = document.getElementById('resume-builder');
+
+        if (card) card.classList.toggle('resume-locked', Boolean(disabled));
+
+        if (notice) {
+            const txt = String(noticeText || '').trim();
+            notice.style.display = disabled && txt ? 'block' : 'none';
+            notice.textContent = txt;
+        }
+
+        if (btn) {
+            btn.disabled = Boolean(disabled);
+            btn.setAttribute('aria-disabled', Boolean(disabled) ? 'true' : 'false');
+        }
+
+        if (section) {
+            const fields = section.querySelectorAll('input, textarea');
+            fields.forEach((el) => {
+                el.disabled = Boolean(disabled);
+            });
+        }
+    };
+
+    // Allow resetForm() and other flows to reuse this.
+    window.setResumeBuilderDisabled = setResumeBuilderDisabled;
+
     const setBadgeUi = (riskLevel) => {
         const normalized = String(riskLevel || '').toLowerCase();
         if (!badge) return;
@@ -178,6 +264,11 @@ window.runAnalysis = async function runAnalysis() {
 
         const fallbackRisk = fallbackScore >= 70 ? 'High' : fallbackScore >= 35 ? 'Medium' : 'Low';
         setBadgeUi(fallbackRisk);
+
+        setResumeBuilderDisabled(
+            fallbackRisk === 'High',
+            fallbackRisk === 'High' ? 'High risk detected. We recommend not sharing your resume or personal data with this source.' : ''
+        );
 
         if (fallbackRisk === 'High') {
             renderVerdict('High-risk signals found. Do not share money or personal documents until verified.', detected.slice(0, 5));
@@ -242,11 +333,13 @@ window.runAnalysis = async function runAnalysis() {
                         'High-risk signals found (BERT + forensic rules). Do not send money or sensitive documents until independently verified.',
                         report.length ? report : ['Scam probability is high.']
                     );
+                    setResumeBuilderDisabled(true, 'High risk detected. We recommend not sharing your resume or personal data with this source.');
                 } else {
                     renderVerdict(
                         'No strong scam indicators were detected by the BERT + rules scan. Still verify the recruiter identity and domain before proceeding.',
                         report
                     );
+                    setResumeBuilderDisabled(false, '');
                 }
 
                 clearTimeout(timeout);
@@ -310,7 +403,24 @@ window.runAnalysis = async function runAnalysis() {
         }
 
         const linkedInLine = `LinkedIn/company check: ${String(data.linkedin_status || 'not_checked').replace(/_/g, ' ')}`;
-        renderVerdict(data.verdict || 'Analysis complete.', [{ text: domainLine, tone: domainTone }, linkedInLine, reasons.slice(0, 6)]);
+
+        // Reasoning-based output (risk cards)
+        const cardsFromApi = Array.isArray(data.risk_cards) ? data.risk_cards : [];
+        const metaLines = [{ text: domainLine, tone: domainTone }, linkedInLine];
+
+        if (cardsFromApi.length) {
+            renderRiskCardsReport(data.verdict || 'Analysis complete.', metaLines, cardsFromApi, reasons.slice(0, 6));
+        } else {
+            // Backward compatible fallback
+            renderVerdict(data.verdict || 'Analysis complete.', [metaLines, reasons.slice(0, 6)]);
+        }
+
+        // Safety lock: disable resume builder if high risk
+        const isHighRisk = String(riskLevel || '').toLowerCase().includes('high') || score >= 70;
+        setResumeBuilderDisabled(
+            isHighRisk,
+            isHighRisk ? 'High risk detected. We recommend not sharing your resume or personal data with this source.' : ''
+        );
     } catch (error) {
         console.warn('Instant analyzer backend call failed:', error.message);
         const didUsePythonFallback = await tryPythonPredictFallback();
@@ -348,6 +458,10 @@ window.resetForm = function resetForm() {
         badge.innerText = '';
         badge.style.background = 'transparent';
         badge.style.color = '#002147';
+    }
+
+    if (typeof window.setResumeBuilderDisabled === 'function') {
+        window.setResumeBuilderDisabled(false, '');
     }
 };
 

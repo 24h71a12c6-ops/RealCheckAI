@@ -130,6 +130,161 @@ function uniqueNonEmpty(values) {
   return Array.from(new Set((values || []).filter(Boolean)));
 }
 
+function escapeRegExp(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function buildEvidenceSnippets(text, terms, maxSnippets = 2) {
+  const raw = String(text || "");
+  const cleanTerms = uniqueNonEmpty(terms)
+    .map((t) => String(t || "").trim())
+    .filter(Boolean)
+    .slice(0, 10);
+
+  if (!raw || cleanTerms.length === 0) return [];
+
+  const snippets = [];
+  for (const term of cleanTerms) {
+    const re = new RegExp(escapeRegExp(term), "i");
+    const match = re.exec(raw);
+    if (!match || typeof match.index !== "number") continue;
+
+    const start = Math.max(0, match.index - 60);
+    const end = Math.min(raw.length, match.index + term.length + 80);
+    const slice = raw.slice(start, end).trim();
+
+    if (slice && !snippets.includes(slice)) {
+      snippets.push(slice);
+      if (snippets.length >= maxSnippets) break;
+    }
+  }
+
+  return snippets;
+}
+
+function buildReasoningRiskCards({
+  message,
+  email,
+  domainStatus,
+  domainAgeDays,
+  domainChecked
+}) {
+  const msg = String(message || "");
+  const norm = normalizeText(msg);
+  const cards = [];
+
+  // 1) Financial fraud
+  const financialMatches = [];
+  const matchedKw = paymentKeywords.filter((k) => norm.includes(k)).slice(0, 6);
+  if (matchedKw.length) financialMatches.push(...matchedKw);
+  if (/(upi|phonepe|google\s*pay|gpay|paytm)/i.test(msg)) financialMatches.push("UPI/Wallet");
+  if (/(₹|\$|rs\.?|inr)\s*\d[\d,]*/i.test(msg)) financialMatches.push("amount");
+
+  const financialHit =
+    strongFraudPaymentTerms.test(norm) ||
+    paymentPatterns.some((p) => p.test(msg)) ||
+    additionalPaymentTrapPatterns.some((p) => p.test(msg));
+
+  if (financialHit) {
+    const terms = uniqueNonEmpty(financialMatches);
+    cards.push({
+      id: "financial_fraud",
+      level: "critical",
+      title: "Financial Fraud",
+      icon: "💰",
+      message: "Money requests (fee/deposit/UPI) are a major scam indicator. Genuine companies do not ask candidates to pay to get hired.",
+      matched_terms: terms,
+      evidence: buildEvidenceSnippets(msg, terms)
+    });
+  }
+
+  // 2) High-pressure tactics
+  const urgencyHit =
+    urgencyPatterns.some((p) => p.test(norm)) ||
+    /\b\d+\s*(hours?|hrs?)\s*(left)?\b/i.test(msg) ||
+    /\bwithin\s*\d+\s*(hours?|hrs?)\b/i.test(msg);
+  if (urgencyHit) {
+    const terms = uniqueNonEmpty([
+      ...(norm.includes("urgent") ? ["urgent"] : []),
+      ...(norm.includes("immediate") ? ["immediate"] : []),
+      ...(norm.includes("last") ? ["last"] : []),
+      ...(norm.includes("within") ? ["within"] : [])
+    ]);
+
+    cards.push({
+      id: "urgency_pressure",
+      level: "high",
+      title: "High‑Pressure Tactics",
+      icon: "⏳",
+      message: "Fake deadlines and urgency are used to stop you from verifying details. Slow down and verify independently.",
+      matched_terms: terms,
+      evidence: buildEvidenceSnippets(msg, terms)
+    });
+  }
+
+  // 3) Unofficial communication channel
+  const channelMatches = suspiciousChannels.filter((c) => norm.includes(c)).slice(0, 6);
+  const emailRaw = String(email || "").toLowerCase();
+  const emailDomain = emailRaw.includes("@") ? (emailRaw.split("@")[1] || "") : "";
+  if (emailDomain && freeEmailDomains.includes(emailDomain)) channelMatches.push(emailDomain);
+
+  if (channelMatches.length) {
+    const terms = uniqueNonEmpty(channelMatches);
+    cards.push({
+      id: "unofficial_channel",
+      level: "high",
+      title: "Unofficial Channel",
+      icon: "📱",
+      message: "Professional hiring typically happens via corporate email domains and official portals — not personal email or chat apps.",
+      matched_terms: terms,
+      evidence: buildEvidenceSnippets(msg, terms)
+    });
+  }
+
+  // 4) Unrealistic hiring flow
+  const hiringHit =
+    fastSelectionPatterns.some((p) => p.test(msg)) ||
+    /no\s*interview|without\s*interview|interview\s*not\s*required/i.test(msg) ||
+    /direct\s*selection|selected\s*(for|within)|you\s*are\s*hired/i.test(msg);
+
+  if (hiringHit) {
+    const terms = uniqueNonEmpty([
+      ...(norm.includes("direct selection") ? ["direct selection"] : []),
+      ...(norm.includes("no interview") ? ["no interview"] : []),
+      ...(norm.includes("without interview") ? ["without interview"] : []),
+      ...(norm.includes("offer letter") ? ["offer letter"] : [])
+    ]);
+
+    cards.push({
+      id: "unrealistic_hiring",
+      level: "medium",
+      title: "Unrealistic Hiring",
+      icon: "🎓",
+      message: "Being selected without a proper interview process is a red flag. Verify the company, role, and interview steps.",
+      matched_terms: terms,
+      evidence: buildEvidenceSnippets(msg, terms)
+    });
+  }
+
+  // Bonus: Domain intelligence (when available/meaningful)
+  const domainNorm = String(domainStatus || "").toLowerCase();
+  if (domainChecked && (domainNorm === "new" || domainNorm === "young" || domainNorm === "unknown" || domainNorm === "error")) {
+    const level = domainNorm === "new" ? "high" : domainNorm === "young" ? "medium" : "medium";
+    const ageText = Number.isFinite(domainAgeDays) ? `${domainAgeDays} day(s)` : domainNorm;
+    cards.push({
+      id: "domain_intel",
+      level,
+      title: "Domain Intelligence",
+      icon: "🌐",
+      message: `Domain checked: ${domainChecked}. Age result: ${ageText}. Newly created or unverifiable domains can be risky for hiring offers.`,
+      matched_terms: uniqueNonEmpty([String(domainChecked)]),
+      evidence: []
+    });
+  }
+
+  return cards;
+}
+
 function extractDomain(url) {
   if (!url) return "";
   const raw = String(url).trim();
@@ -1002,10 +1157,19 @@ async function detectScam({ message, email, website, companyName }) {
       ? "Suspicious"
       : "Safe";
 
+  const risk_cards = buildReasoningRiskCards({
+    message,
+    email: effectiveEmail,
+    domainStatus,
+    domainAgeDays,
+    domainChecked: domain || null
+  });
+
   return {
     risk,
     risk_band: riskBand,
     verdict: bandVerdict,
+    risk_cards,
     scam_score: finalScore,
     hard_rules_score: hardRulesScore,
     llm_score: hybrid.llm.ai_score,

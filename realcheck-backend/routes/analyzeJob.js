@@ -49,6 +49,7 @@ router.post('/', async (req, res) => {
             green_flags: Array.isArray(detection.green_flags) ? detection.green_flags : [],
             risk_band: detection.risk_band || (detection.score > 60 ? 'SCAM' : detection.score > 30 ? 'Suspicious' : 'Safe'),
             red_flags: Array.isArray(detection.red_flags) ? detection.red_flags : (Array.isArray(detection.reasons) ? detection.reasons : []),
+            risk_cards: Array.isArray(detection.risk_cards) ? detection.risk_cards : [],
             metadata: detection.metadata || null,
             risk_level: detection.risk,
             score: detection.score,

@@ -836,6 +836,185 @@ body.light .view-btn:hover {
   font-weight: 700;
 }
 
+/* ========== REASONING-BASED OUTPUT (RISK CARDS) ========== */
+.risk-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 14px;
+}
+
+.risk-cards {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+@media (min-width: 760px) {
+  .risk-cards {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.risk-card {
+  padding: 14px 14px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.risk-card.critical {
+  border-color: rgba(239, 68, 68, 0.60);
+  background: rgba(239, 68, 68, 0.10);
+}
+
+.risk-card.high {
+  border-color: rgba(245, 158, 11, 0.55);
+  background: rgba(245, 158, 11, 0.10);
+}
+
+.risk-card.medium {
+  border-color: rgba(59, 130, 246, 0.55);
+  background: rgba(59, 130, 246, 0.10);
+}
+
+.risk-card.info {
+  border-color: rgba(var(--primary-rgb), 0.45);
+  background: rgba(var(--primary-rgb), 0.08);
+}
+
+.risk-card__title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 850;
+  letter-spacing: -0.01em;
+  color: #e6efcf;
+  margin-bottom: 6px;
+}
+
+.risk-card__body {
+  color: var(--text-secondary);
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+.risk-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.risk-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.risk-evidence {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  color: #e6efcf;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.risk-evidence__snippet + .risk-evidence__snippet {
+  margin-top: 8px;
+}
+
+.risk-evidence mark {
+  background: rgba(var(--primary-rgb), 0.22);
+  color: #e6efcf;
+  padding: 0 3px;
+  border-radius: 6px;
+}
+
+.risk-card__list {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.risk-card__item {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+body.light .risk-card {
+  border-color: rgba(0, 0, 0, 0.10);
+  background: rgba(0, 0, 0, 0.03);
+}
+
+body.light .risk-card__title {
+  color: #1f2b06;
+}
+
+body.light .risk-card__body {
+  color: #2d3f08;
+}
+
+body.light .risk-pill {
+  background: rgba(255, 255, 255, 0.75);
+  border-color: rgba(0, 0, 0, 0.10);
+  color: #2d3f08;
+}
+
+body.light .risk-evidence {
+  background: rgba(255, 255, 255, 0.75);
+  border-color: rgba(0, 0, 0, 0.12);
+  color: #1f2b06;
+}
+
+body.light .risk-evidence mark {
+  background: rgba(164, 212, 14, 0.28);
+  color: #1f2b06;
+}
+
+/* ========== RESUME BUILDER SAFETY LOCK ========== */
+.resume-risk-notice {
+  margin: 14px 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(239, 68, 68, 0.40);
+  background: rgba(239, 68, 68, 0.10);
+  color: #fecaca;
+  font-weight: 750;
+  text-align: left;
+}
+
+body.light .resume-risk-notice {
+  color: #7f1d1d;
+  background: rgba(239, 68, 68, 0.10);
+  border-color: rgba(185, 28, 28, 0.35);
+}
+
+.resume-locked {
+  opacity: 0.65;
+  filter: grayscale(0.15);
+}
+
+.resume-locked .btn-check {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
 body.light .verdict-summary {
   color: #1f2b06;
 }
