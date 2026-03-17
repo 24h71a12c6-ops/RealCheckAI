@@ -285,12 +285,29 @@ window.runAnalysis = async function runAnalysis() {
 
         const domainStatusRaw = String(data.domain_status || 'not checked').toLowerCase();
         const hasKnownDomainAge = data.domain_age_days !== null && data.domain_age_days !== undefined;
-        const domainLine = hasKnownDomainAge
-            ? `Domain age: ${data.domain_age_days} day(s)`
-            : `Domain age: ${data.domain_status || 'not checked'}`;
-        const domainTone = hasKnownDomainAge
-            ? ''
-            : (domainStatusRaw.includes('unknown') || domainStatusRaw.includes('not') ? 'warning' : '');
+        const checkedDomain = data.domain_checked ? String(data.domain_checked) : '';
+        const domainMessage = data.domain_message ? String(data.domain_message) : '';
+
+        let domainLine = '';
+        if (hasKnownDomainAge) {
+            const prefix = checkedDomain ? `Domain checked: ${checkedDomain} — ` : '';
+            domainLine = `${prefix}age: ${data.domain_age_days} day(s)`;
+        } else if (checkedDomain) {
+            domainLine = `Domain checked: ${checkedDomain} — age: ${data.domain_status || 'not checked'}${domainMessage ? ` (${domainMessage})` : ''}`;
+        } else if (domainStatusRaw.includes('skipped') || domainStatusRaw.includes('not')) {
+            domainLine = 'Domain: not found in the text (age check skipped)';
+        } else {
+            domainLine = `Domain age: ${data.domain_status || 'not checked'}${domainMessage ? ` (${domainMessage})` : ''}`;
+        }
+
+        let domainTone = '';
+        if (hasKnownDomainAge) {
+            const days = Number(data.domain_age_days);
+            if (Number.isFinite(days) && days < 90) domainTone = 'danger';
+            else if (Number.isFinite(days) && days < 365) domainTone = 'warning';
+        } else if (domainStatusRaw.includes('unknown') || domainStatusRaw.includes('error')) {
+            domainTone = 'warning';
+        }
 
         const linkedInLine = `LinkedIn/company check: ${String(data.linkedin_status || 'not_checked').replace(/_/g, ' ')}`;
         renderVerdict(data.verdict || 'Analysis complete.', [{ text: domainLine, tone: domainTone }, linkedInLine, reasons.slice(0, 6)]);

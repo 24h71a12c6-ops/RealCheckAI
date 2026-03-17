@@ -32,6 +32,8 @@ router.post('/', async (req, res) => {
             linkedin_status: detection.linkedin_status || 'not_checked',
             domain_status: detection.domain_status || 'not_checked',
             domain_checked: detection.domain_checked || null,
+            domain_message: detection.domain_result?.message || null,
+            domain_result_status: detection.domain_result?.status || null,
             domain_age_days: Number.isFinite(detection.domain_age_days) ? detection.domain_age_days : null,
             domain_created_date: detection.domain_created_date || null,
             // New structured scoring model

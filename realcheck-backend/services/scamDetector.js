@@ -812,6 +812,9 @@ async function detectScam({ message, email, website, companyName }) {
     domainCreatedDate = domainResult?.createdOn || null;
     domainAgeDays = Number.isFinite(domainResult?.ageDays) ? domainResult.ageDays : null;
 
+    const whoisStatus = String(domainResult?.status || "").toLowerCase();
+    const whoisMessage = String(domainResult?.message || "").trim();
+
     if (domainAgeDays !== null && domainAgeDays < 90) {
       domainStatus = "new";
       riskScore += 40;
@@ -821,9 +824,19 @@ async function detectScam({ message, email, website, companyName }) {
       riskScore += 15;
       reasons.push(`Domain is relatively new — ${domainAgeDays} day(s) old`);
     } else if (domainAgeDays === null) {
-      domainStatus = "unknown";
-      riskScore += 30;
-      reasons.push("Domain intelligence unavailable (WHOIS unknown) — treating as risk by default");
+      if (whoisStatus === "error") {
+        domainStatus = "error";
+        riskScore += 30;
+        reasons.push(
+          `Domain intelligence error (WHOIS failed)${whoisMessage ? ": " + whoisMessage.slice(0, 160) : ""} — treating as risk by default`
+        );
+      } else {
+        domainStatus = "unknown";
+        riskScore += 30;
+        reasons.push(
+          `Domain intelligence unavailable (WHOIS unknown)${whoisMessage ? ": " + whoisMessage.slice(0, 160) : ""} — treating as risk by default`
+        );
+      }
     } else {
       domainStatus = "established";
       greenFlags.push({ points: 8, reason: "Established domain age" });
