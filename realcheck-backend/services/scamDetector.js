@@ -171,19 +171,30 @@ function buildReasoningRiskCards({
 }) {
   const msg = String(message || "");
   const norm = normalizeText(msg);
+  const noisy = normalizeNoisyOcrText(msg);
+  const squashed = squashAlnum(noisy);
   const cards = [];
 
   // 1) Financial fraud
   const financialMatches = [];
-  const matchedKw = paymentKeywords.filter((k) => norm.includes(k)).slice(0, 6);
+  const matchedKw = paymentKeywords.filter((k) => norm.includes(k) || includesLoose(squashed, k)).slice(0, 6);
   if (matchedKw.length) financialMatches.push(...matchedKw);
-  if (/(upi|phonepe|google\s*pay|gpay|paytm)/i.test(msg)) financialMatches.push("UPI/Wallet");
+  if (/(upi|phonepe|google\s*pay|gpay|paytm)/i.test(msg) || /(upi|phonepe|googlepay|gpay|paytm)/i.test(squashed)) financialMatches.push("UPI/Wallet");
   if (/(₹|\$|rs\.?|inr)\s*\d[\d,]*/i.test(msg)) financialMatches.push("amount");
+  if (/(rs|inr|usd|eur)\d{2,}/i.test(squashed)) financialMatches.push("amount");
+
+  // If OCR noise hid the exact phrase match, still surface canonical matched terms.
+  if (/registration/i.test(squashed)) financialMatches.push("registration");
+  if (/fee/i.test(squashed)) financialMatches.push("fee");
+  if (/deposit/i.test(squashed)) financialMatches.push("deposit");
+  if (/payment/i.test(squashed)) financialMatches.push("payment");
+  if (/upi/i.test(squashed)) financialMatches.push("upi");
 
   const financialHit =
     strongFraudPaymentTerms.test(norm) ||
     paymentPatterns.some((p) => p.test(msg)) ||
-    additionalPaymentTrapPatterns.some((p) => p.test(msg));
+    additionalPaymentTrapPatterns.some((p) => p.test(msg)) ||
+    /(fee|deposit|registration|upi|payment|pay)/i.test(squashed);
 
   if (financialHit) {
     const terms = uniqueNonEmpty(financialMatches);
@@ -202,7 +213,10 @@ function buildReasoningRiskCards({
   const urgencyHit =
     urgencyPatterns.some((p) => p.test(norm)) ||
     /\b\d+\s*(hours?|hrs?)\s*(left)?\b/i.test(msg) ||
-    /\bwithin\s*\d+\s*(hours?|hrs?)\b/i.test(msg);
+    /\bwithin\s*\d+\s*(hours?|hrs?)\b/i.test(msg) ||
+    /(urgent|immediate|deadline|asap)/i.test(squashed) ||
+    /(\d{1,2}hours?|\d{1,2}hrs?)/i.test(squashed) ||
+    /within\d{1,2}hours?/i.test(squashed);
   if (urgencyHit) {
     const terms = uniqueNonEmpty([
       ...(norm.includes("urgent") ? ["urgent"] : []),
@@ -223,10 +237,15 @@ function buildReasoningRiskCards({
   }
 
   // 3) Unofficial communication channel
-  const channelMatches = suspiciousChannels.filter((c) => norm.includes(c)).slice(0, 6);
+  const channelMatches = suspiciousChannels.filter((c) => norm.includes(c) || includesLoose(squashed, c)).slice(0, 6);
   const emailRaw = String(email || "").toLowerCase();
   const emailDomain = emailRaw.includes("@") ? (emailRaw.split("@")[1] || "") : "";
   if (emailDomain && freeEmailDomains.includes(emailDomain)) channelMatches.push(emailDomain);
+
+  if (includesLoose(squashed, "gmail.com")) channelMatches.push("gmail.com");
+  if (includesLoose(squashed, "yahoo.com")) channelMatches.push("yahoo.com");
+  if (includesLoose(squashed, "outlook.com")) channelMatches.push("outlook.com");
+  if (includesLoose(squashed, "hotmail.com")) channelMatches.push("hotmail.com");
 
   if (channelMatches.length) {
     const terms = uniqueNonEmpty(channelMatches);
@@ -245,14 +264,16 @@ function buildReasoningRiskCards({
   const hiringHit =
     fastSelectionPatterns.some((p) => p.test(msg)) ||
     /no\s*interview|without\s*interview|interview\s*not\s*required/i.test(msg) ||
-    /direct\s*selection|selected\s*(for|within)|you\s*are\s*hired/i.test(msg);
+    /direct\s*selection|selected\s*(for|within)|you\s*are\s*hired/i.test(msg) ||
+    includesLoose(squashed, "direct selection") ||
+    includesLoose(squashed, "no interview");
 
   if (hiringHit) {
     const terms = uniqueNonEmpty([
-      ...(norm.includes("direct selection") ? ["direct selection"] : []),
-      ...(norm.includes("no interview") ? ["no interview"] : []),
-      ...(norm.includes("without interview") ? ["without interview"] : []),
-      ...(norm.includes("offer letter") ? ["offer letter"] : [])
+      ...(norm.includes("direct selection") || includesLoose(squashed, "direct selection") ? ["direct selection"] : []),
+      ...(norm.includes("no interview") || includesLoose(squashed, "no interview") || includesLoose(squashed, "nointerview") ? ["no interview"] : []),
+      ...(norm.includes("without interview") || includesLoose(squashed, "without interview") ? ["without interview"] : []),
+      ...(norm.includes("offer letter") || includesLoose(squashed, "offer letter") ? ["offer letter"] : [])
     ]);
 
     cards.push({
@@ -300,6 +321,44 @@ function buildUrl(input) {
   const s = String(input || "").trim();
   if (!s) return null;
   return /^https?:\/\//i.test(s) ? s : `https://${s}`;
+}
+
+// OCR can introduce noise: extra symbols, split letters, leet-like substitutions.
+// These helpers make detection more robust without requiring perfect text.
+function normalizeNoisyOcrText(value) {
+  let s = String(value || "").toLowerCase();
+  if (!s) return "";
+
+  // Common OCR/leet substitutions
+  s = s
+    .replace(/[@]/g, "a")
+    .replace(/[£]/g, "e")
+    .replace(/[€]/g, "e")
+    .replace(/[₹]/g, "rs")
+    .replace(/[|!]/g, "i")
+    .replace(/0/g, "o")
+    .replace(/1/g, "i")
+    .replace(/3/g, "e")
+    .replace(/4/g, "a")
+    .replace(/5/g, "s")
+    .replace(/7/g, "t")
+    .replace(/8/g, "b")
+    .replace(/9/g, "g");
+
+  return s;
+}
+
+function squashAlnum(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "")
+    .trim();
+}
+
+function includesLoose(squashedHaystack, phrase) {
+  const needle = squashAlnum(phrase);
+  if (!needle) return false;
+  return String(squashedHaystack || "").includes(needle);
 }
 
 function getRootDomain(domain) {
@@ -783,6 +842,8 @@ async function detectScam({ message, email, website, companyName }) {
   const effectiveWebsite = String(website || metadata.urls[0] || "").trim();
 
   const normMsg  = normalizeText(message);
+  const noisyMsg = normalizeNoisyOcrText(message);
+  const squashedMsg = squashAlnum(noisyMsg);
   const normEmail = normalizeText(effectiveEmail);
   const normSite  = effectiveWebsite;
 
@@ -796,14 +857,17 @@ async function detectScam({ message, email, website, companyName }) {
   const greenFlags = [];
 
   // 1. Payment keyword + regex pattern (+40)
-  const matchedKw = paymentKeywords.filter((k) => normMsg.includes(k));
-  const hasPayPat  = paymentPatterns.some((p) => p.test(message || ""));
+  // Use loose matching so OCR like "r e g i s t r a t i o n f e e" still hits.
+  const matchedKw = paymentKeywords.filter((k) => normMsg.includes(k) || includesLoose(squashedMsg, k));
+  const containsFeeLoose = /(fee|deposit|registration|upi|payment|pay)/i.test(squashedMsg);
+  const hasPayPat  = paymentPatterns.some((p) => p.test(message || "")) || containsFeeLoose;
   const hasAmountMention = /(₹|\$|rs\.?|inr)\s*\d[\d,]*/i.test(normMsg);
+  const hasAmountMentionLoose = /(rs|inr|usd|eur)\d{2,}/i.test(squashedMsg);
   const hasCompensationContext = compensationSafePatterns.some((p) => p.test(normMsg));
   const hasActionablePayDemand = /\b(pay|payment|send|transfer|deposit)\b[\s\S]{0,30}\b(confirm|registration|fee|deposit|processing|assessment|application|verification|booking)\b/i.test(normMsg);
   const hasStrongFraudTerms = strongFraudPaymentTerms.test(normMsg) || matchedKw.length > 0;
-  const hasHardPaymentOverride = hardPaymentOverrideTerms.some((term) => normMsg.includes(term));
-  const hasDigitalWalletRequest = /(upi|phonepe|google\s*pay|gpay|paytm)/i.test(normMsg);
+  const hasHardPaymentOverride = hardPaymentOverrideTerms.some((term) => normMsg.includes(term) || includesLoose(squashedMsg, term));
+  const hasDigitalWalletRequest = /(upi|phonepe|google\s*pay|gpay|paytm)/i.test(normMsg) || /(upi|phonepe|googlepay|gpay|paytm)/i.test(squashedMsg);
 
   // CRITICAL: refundable + payment request in the same sentence is a classic deposit/refund trap.
   // We treat this as near-certain scam intent and prevent model blending from diluting the score.
@@ -818,7 +882,7 @@ async function detectScam({ message, email, website, companyName }) {
 
   // Avoid false positives for normal stipend/salary mentions.
   const compensationOnlyAmount =
-    hasAmountMention &&
+    (hasAmountMention || hasAmountMentionLoose) &&
     hasCompensationContext &&
     !hasActionablePayDemand &&
     !hasStrongFraudTerms;
@@ -849,11 +913,29 @@ async function detectScam({ message, email, website, companyName }) {
     reasons.push("CRITICAL: 'refundable' + payment request appears in the same sentence (deposit/refund trap)");
   }
 
+  // OCR-aggressive CRITICAL override: monetary extortion (fee/deposit/UPI/payment) in messy text.
+  // This prevents noisy OCR content from incorrectly showing SAFE.
+  const containsMonetaryExtortion =
+    containsFeeLoose &&
+    !compensationOnlyAmount &&
+    (/(fee|deposit|registration|upi|payment)/i.test(squashedMsg) || hasActionablePayDemand || hasDigitalWalletRequest);
+
+  if (containsMonetaryExtortion) {
+    riskScore = 100;
+    reasons.push("CRITICAL: Mandatory payment request detected (OCR-robust match)");
+  }
+
   // 2. Suspicious recruitment channels (+30)
-  const matchedCh = suspiciousChannels.filter((c) => normMsg.includes(c));
+  const matchedCh = suspiciousChannels.filter((c) => normMsg.includes(c) || includesLoose(squashedMsg, c));
   if (matchedCh.length > 0) {
     riskScore += 30;
     reasons.push(`Recruitment via suspicious channel: ${matchedCh.slice(0, 2).join(", ")}`);
+  }
+
+  // OCR can split "gmail.com" as "g m a i l . c o m"
+  if (includesLoose(squashedMsg, "gmail.com") || includesLoose(squashedMsg, "yahoo.com") || includesLoose(squashedMsg, "outlook.com") || includesLoose(squashedMsg, "hotmail.com")) {
+    riskScore += 20;
+    reasons.push("Recruiter contact appears to use a personal email provider (OCR-robust match)");
   }
 
   // 4b. Interviews only on chat apps (+20)
@@ -865,7 +947,12 @@ async function detectScam({ message, email, website, companyName }) {
   }
 
   // 3. Urgency / high-pressure language (+20)
-  if (urgencyPatterns.some((p) => p.test(normMsg))) {
+  const containsUrgencyLoose =
+    /(urgent|immediate|deadline|asap)/i.test(squashedMsg) ||
+    /(\d{1,2}hours?|\d{1,2}hrs?)/i.test(squashedMsg) ||
+    /within\d{1,2}hours?/i.test(squashedMsg);
+
+  if (urgencyPatterns.some((p) => p.test(normMsg)) || containsUrgencyLoose) {
     riskScore += 20;
     reasons.push("High-pressure urgency language detected");
   }
@@ -879,8 +966,14 @@ async function detectScam({ message, email, website, companyName }) {
   }
 
   // 3c. Offer credibility red flags (no interview + immediate joining + bank/payroll request)
-  const hasNoInterview = /no\s*interview|without\s*interview|interview\s*not\s*required/i.test(message || "");
-  const hasImmediateJoining = /immediate\s*joining|join\s*immediately/i.test(message || "");
+  const hasNoInterview =
+    /no\s*interview|without\s*interview|interview\s*not\s*required/i.test(message || "") ||
+    includesLoose(squashedMsg, "no interview") ||
+    includesLoose(squashedMsg, "without interview");
+  const hasImmediateJoining =
+    /immediate\s*joining|join\s*immediately/i.test(message || "") ||
+    includesLoose(squashedMsg, "immediate joining") ||
+    includesLoose(squashedMsg, "join immediately");
   const hasBankForPayroll = /(bank\s*(details|account|information|account\s*number)|account\s*number)[\s\S]{0,70}(stipend|salary|payroll|processing)/i.test(message || "");
   const hasRemoteHighPaySignal = /(remote|work\s*from\s*home)[\s\S]{0,80}(₹|inr)\s*\d[\d,]*/i.test(message || "") ||
                                  /(₹|inr)\s*\d[\d,]*[\s\S]{0,80}(remote|work\s*from\s*home)/i.test(message || "");
@@ -1117,9 +1210,9 @@ async function detectScam({ message, email, website, companyName }) {
   riskScore = Math.min(riskScore, 100);
 
   const greenBonusRaw = greenFlags.reduce((sum, g) => sum + Number(g.points || 0), 0);
-  const hasCriticalPaymentSignal = hasPaymentTrap || hasPayPat || matchedKw.length > 0 || hasActionablePayDemand;
+  const hasCriticalPaymentSignal = hasPaymentTrap || hasPayPat || matchedKw.length > 0 || hasActionablePayDemand || containsMonetaryExtortion;
   const hasCriticalSensitiveDataSignal = hasSensitivePreHiringRequest && (hasNoInterview || hasImmediateJoining || !hasProfessionalMeetingLink);
-  const hardOverrideActive = hasHardPaymentOverride || criticalBrandPaymentFraud || criticalRefundablePayCombo;
+  const hardOverrideActive = hasHardPaymentOverride || criticalBrandPaymentFraud || criticalRefundablePayCombo || containsMonetaryExtortion;
 
   // Allow stronger neutralization for truly clean offers, but be strict when money/sensitive-data red flags exist.
   const greenCap = hardOverrideActive ? 0 : (hasCriticalPaymentSignal || hasCriticalSensitiveDataSignal ? 20 : 50);
