@@ -194,14 +194,24 @@ function buildReasoningRiskCards({
     strongFraudPaymentTerms.test(norm) ||
     paymentPatterns.some((p) => p.test(msg)) ||
     additionalPaymentTrapPatterns.some((p) => p.test(msg)) ||
-    /(fee|deposit|registration|upi|payment|pay)/i.test(squashed);
+    /(fee|fees|deposit|registration|upi|payment|pay|charge|charges|token|money|amount|transfer|send|scan|qr|payable)/i.test(squashed);
 
-  if (financialHit) {
+  const financialNegation =
+    /\bno\s*(fee|fees|payment|deposit|charges?|registration)\b/i.test(norm) ||
+    /(nofee|nofees|nopayment|nodeposit|nocharge|nocharges|noregistration)/i.test(squashed) ||
+    /\bfree\s*of\s*cost\b/i.test(norm);
+
+  const financialAffirmativeSignal =
+    /(upi|phonepe|googlepay|gpay|paytm|payment|pay|deposit|transfer|send|scan|qr|payable)/i.test(squashed) ||
+    /(₹|\$|rs\.?|inr)\s*\d[\d,]*/i.test(msg) ||
+    /(rs|inr|usd|eur)\d{2,}/i.test(squashed);
+
+  if (financialHit && !(financialNegation && !financialAffirmativeSignal)) {
     const terms = uniqueNonEmpty(financialMatches);
     cards.push({
       id: "financial_fraud",
       level: "critical",
-      title: "Financial Fraud",
+      title: "Monetary Extortion Detected",
       icon: "💰",
       message: "Money requests (fee/deposit/UPI) are a major scam indicator. Genuine companies do not ask candidates to pay to get hired.",
       matched_terms: terms,
@@ -859,8 +869,7 @@ async function detectScam({ message, email, website, companyName }) {
   // 1. Payment keyword + regex pattern (+40)
   // Use loose matching so OCR like "r e g i s t r a t i o n f e e" still hits.
   const matchedKw = paymentKeywords.filter((k) => normMsg.includes(k) || includesLoose(squashedMsg, k));
-  const containsFeeLoose = /(fee|deposit|registration|upi|payment|pay)/i.test(squashedMsg);
-  const hasPayPat  = paymentPatterns.some((p) => p.test(message || "")) || containsFeeLoose;
+  const containsFeeLoose = /(fee|fees|deposit|registration|upi|payment|pay|charge|charges|token|money|amount|transfer|send|scan|qr|payable)/i.test(squashedMsg);
   const hasAmountMention = /(₹|\$|rs\.?|inr)\s*\d[\d,]*/i.test(normMsg);
   const hasAmountMentionLoose = /(rs|inr|usd|eur)\d{2,}/i.test(squashedMsg);
   const hasCompensationContext = compensationSafePatterns.some((p) => p.test(normMsg));
@@ -868,6 +877,19 @@ async function detectScam({ message, email, website, companyName }) {
   const hasStrongFraudTerms = strongFraudPaymentTerms.test(normMsg) || matchedKw.length > 0;
   const hasHardPaymentOverride = hardPaymentOverrideTerms.some((term) => normMsg.includes(term) || includesLoose(squashedMsg, term));
   const hasDigitalWalletRequest = /(upi|phonepe|google\s*pay|gpay|paytm)/i.test(normMsg) || /(upi|phonepe|googlepay|gpay|paytm)/i.test(squashedMsg);
+
+  const hasFeeNegation =
+    /\bno\s*(fee|fees|payment|deposit|charges?|registration)\b/i.test(normMsg) ||
+    /(nofee|nofees|nopayment|nodeposit|nocharge|nocharges|noregistration)/i.test(squashedMsg) ||
+    /\bfree\s*of\s*cost\b/i.test(normMsg);
+
+  // If text explicitly says "no fee" and there's no other payment demand signal,
+  // treat it as NOT a payment request.
+  const containsFeeLooseEffective =
+    containsFeeLoose &&
+    !(hasFeeNegation && !hasActionablePayDemand && !hasDigitalWalletRequest && !hasAmountMention && !hasAmountMentionLoose);
+
+  const hasPayPat  = paymentPatterns.some((p) => p.test(message || "")) || containsFeeLooseEffective;
 
   // CRITICAL: refundable + payment request in the same sentence is a classic deposit/refund trap.
   // We treat this as near-certain scam intent and prevent model blending from diluting the score.
@@ -916,9 +938,14 @@ async function detectScam({ message, email, website, companyName }) {
   // OCR-aggressive CRITICAL override: monetary extortion (fee/deposit/UPI/payment) in messy text.
   // This prevents noisy OCR content from incorrectly showing SAFE.
   const containsMonetaryExtortion =
-    containsFeeLoose &&
+    containsFeeLooseEffective &&
     !compensationOnlyAmount &&
-    (/(fee|deposit|registration|upi|payment)/i.test(squashedMsg) || hasActionablePayDemand || hasDigitalWalletRequest);
+    (
+      /(fee|fees|deposit|registration|upi|payment|charge|charges|token)/i.test(squashedMsg) ||
+      (/(amount|money)/i.test(squashedMsg) && /(pay|payment|deposit|fee|upi|transfer|send|scan|qr)/i.test(squashedMsg)) ||
+      hasActionablePayDemand ||
+      hasDigitalWalletRequest
+    );
 
   if (containsMonetaryExtortion) {
     riskScore = 100;
